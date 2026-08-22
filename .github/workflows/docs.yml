@@ -1,6 +1,8 @@
 name: Documentation
 on:
   push:
+    branches:
+      - main          # <-- add these two lines
     tags:
       - '*' # Runs automatically ONLY when a new tag is pushed (e.g., v1.0.0)
   workflow_dispatch:
