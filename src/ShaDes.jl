@@ -16,65 +16,60 @@ using LensFactory
 
 
 # --------------------------------------------------------------------------------------------------
-# Functions
+# Best-model
 # --------------------------------------------------------------------------------------------------
 struct init_BestModel
    D_d::Float64
    grid_x::Matrix{Float64}
    grid_y::Matrix{Float64}
-   pot::Matrix{Float64}
-   def_x::Matrix{Float64}
-   def_y::Matrix{Float64}
    kappa::Matrix{Float64}
 end
 
-
-function _from_lens(lens::Lenses.AbstractLens, θx::Matrix{Float64}, θy::Matrix{Float64})
-   # Get potential
-   ψ = Lenses.get_potential(lens, θx, θy)
-
-   # Get deflection
-   ψx, ψy = Lenses.get_deflection(lens, θx, θy)
-
-   # Get convergence
-   κ, _, _ = Lenses.get_kappa_gamma(lens, θx, θy, 1.0)
-
-   return ψ, ψx, ψy, κ
-end
-
-
-function init_BestModel(D_d::Float64, grid_x::Matrix{Float64}, grid_y::Matrix{Float64};
-                        lens::Union{Nothing, Lenses.AbstractLens} = nothing,
-                        pot::Union{Nothing, Matrix{Float64}}      = nothing, 
-                        def_x::Union{Nothing, Matrix{Float64}}    = nothing, 
-                        def_y::Union{Nothing, Matrix{Float64}}    = nothing,
-                        kappa::Union{Nothing, Matrix{Float64}}    = nothing)
-   # Check if the lens is provided
-   if !isnothing(lens)
-      @assert size(grid_x) == size(grid_y)
-      pot, def_x, def_y, kappa = _from_lens(lens, grid_x, grid_y)
-   elseif !isnothing(pot) && !isnothing(def_x) && !isnothing(def_y) && !isnothing(kappa)
-      @assert all(size(grid_x) == size(grid_y) == size(pot) == size(def_x) == size(def_y) == size(kappa))
+function init_BestModel(D_d::Float64, lens::Lenses.AbstractLens, θx::Matrix{Float64}, θy::Matrix{Float64})
+   if size(θx) == size(θy)
+      κ, _, _ = Lenses.get_kappa_gamma(lens, θx, θy, 1.0)
    else
-      error("Either provide lens or potential and deflection maps.")
+      throw(ArgumentError("grid_x and grid_y must have the same shape; got $(size(θx)) and $(size(θy))."))
    end
-
-   # Create a struct
-   obj = init_BestModel(D_d, grid_x, grid_y, pot, def_x, def_y, kappa)
-   return obj
+   return init_BestModel(D_d, θx, θy, kappa)
 end
 
 
 # --------------------------------------------------------------------------------------------------
 # Perturbation basis
 # --------------------------------------------------------------------------------------------------
+struct init_PlummerBasis
+   D_d::Float64
+   x_c::Vector{Float64}
+   y_c::Vector{Float64}
+   x_s::Vector{Float64}
+end
+
+function init_PlummerBasis(; D_d::Float64 = NaN, x_c::Vector{Float64}=Float64[], y_c::Vector{Float64}=Float64[], x_s::Vector{Float64}=Float64[])
+   if !(length(x_c) == length(y_c) == length(x_s))
+      throw(ArgumentError("x_c, y_c and x_s must have the same length (one entry per component)."))
+   end
+   return init_PlummerBasis(D_d, x_c, y_c, x_s)
+end
+
+function init_PlummerBasis(D_d::Float64, images::Matrix{Float64}; scale::Float64=NaN, core::Float64=NaN)
+   scale   = isnan(scale) ? 0.5 * critical_scale(images) : scale
+   core    = isnan(core) ? 1.5 * scale : core
+   centres = grid_centres(images, scale)
+   mass    = size(centres, 1)
+   x_s     = fill(float(core), mass)
+   return init_PlummerBasis(D_d=D_d, x_c=centres[:, 1], y_c=centres[:, 2], x_s=x_s)
+end
+
+
+
 function enclosing_ellipse(images::Matrix{Float64}; inflate::Float64 = 1.1, 
                                                     tol::Float64     = 1E-7,
                                                     maxiter::Int64   = 10_000)
    # Check if we have more than one image
    n, d = size(images, 1), size(images, 2)
    if n < 4
-      throw(ArgumentError("need more images than dimensions; got $n."))
+      throw(ArgumentError("Need at least four images."))
    end
 
    # Khachiyan's iteration on the lifted points
@@ -134,48 +129,6 @@ function grid_centres(images::Matrix{Float64}, scale::Float64)
       throw(ArgumentError("scale = $scale is larger than the image field."))
    end
    return permutedims(reduce(hcat, out))
-end
-
-
-
-struct init_PlummerBasis
-   D_d::Float64
-   x_c::Vector{Float64}
-   y_c::Vector{Float64}
-   x_s::Vector{Float64}
-end
-
-
-function init_PlummerBasis(; D_d::Float64 = Float64,
-                           x_c::Vector{Float64} = Float64[],
-                           y_c::Vector{Float64} = Float64[],
-                           x_s::Vector{Float64} = Float64[])
-   if !(length(x_c) == length(y_c) == length(x_s))
-      throw(ArgumentError("x_c, y_c and x_s must have the same length (one entry per component)."))
-   end
-   return init_PlummerBasis(D_d, x_c, y_c, x_s)
-end
-
-
-function init_PlummerBasic(D_d::Float64, images::Matrix{Float64}; scale::Float64=NaN, core::Float64=NaN)
-   # Check if scale is provided
-   if isnan(scale)
-      scale = 0.5 * critical_scale(images)
-   end
-
-   # Plummer centers from grid centers
-   centres = grid_centres(images, scale)
-
-   # Check if core radius is provided
-   if isnan(core)
-      core = 1.5 * scale
-   end
-   x_s = fill(float(core), m)
-
-   # Mass of plummers (default = 1 M⊙)
-   m = size(centres, 1)
-
-   return init_PlummerBasis(D_d = D_d, x_c = centres[:, 1], y_c = centres[:, 2], x_s = x_s)
 end
 
 
@@ -265,13 +218,13 @@ struct init_ShaDes
    basis::init_PlummerBasis
    masses::Vector{Float64}
    images::Matrix{Float64}
-end
 
-function init_ShaDes(basis::init_PlummerBasis, masses, images)
-   if length(masses) != length(basis.x_c)
-      throw(ArgumentError("need one mass per component."))
+   function init_ShaDes(basis::init_PlummerBasis, masses, images)
+      length(masses) == length(basis.x_c) ||
+         throw(ArgumentError("need one mass per component; got $(length(masses)) for " *
+                             "$(length(basis.x_c)) components."))
+      return new(basis, Vector{Float64}(masses), Matrix{Float64}(images))
    end
-   return init_ShaDes(basis, masses, images)
 end
 
 
@@ -313,10 +266,10 @@ function shade_kappa(shade::init_ShaDes, X::Matrix{Float64}, Y::Matrix{Float64})
 end
 
 function amplitude_cap(shade::init_ShaDes, kappa_M::Matrix{Float64}, X::Matrix{Float64}, Y::Matrix{Float64};
-                       kappa_min::Real = 0.1)
+                       kappa_min::Float64 = 0.1)
    dk = shade_kappa(shade, X, Y)
    rms = sqrt(mean(abs2, dk))
-   if rms > 0
+   if rms ≤ 0
       throw(ErrorException("perturbation has zero convergence."))
    end
    dk ./= rms
@@ -343,20 +296,9 @@ struct init_ShaDesEnsemble
    kappa_M::Matrix{Float64}
 end
 
-function _mesh(x::Vector, y::Vector)
-   return repeat(x, 1, length(y)), repeat(y', length(x), 1)
-end
 
-function _map_grid(images::Matrix{<:Real}, grid::Integer, pad::Real)
-   centre, axes_, semi = enclosing_ellipse(images)
-   half = pad .* (abs.(axes_) * semi)
-   x = collect(range(centre[1] - half[1], centre[1] + half[1], length = grid))
-   y = collect(range(centre[2] - half[2], centre[2] + half[2], length = grid))
-   return x, y
-end
-
-function _ensemble_cap(shades::Vector{<:init_ShaDes}, kappa_M::Matrix, X::AbstractMatrix,
-                       Y::AbstractMatrix, kappa_min::Real)
+function _ensemble_cap(shades::Vector{<:init_ShaDes}, kappa_M::Matrix, X::Matrix{Float64},
+                       Y::Matrix{Float64}, kappa_min::Float64)
    caps = filter(isfinite, [amplitude_cap(s, kappa_M, X, Y; kappa_min = kappa_min) for s in shades])
    if isempty(caps)
       throw(ErrorException("positivity gives no bound: no realisation lowers kappa anywhere " *
@@ -376,9 +318,7 @@ function explore(model, images::Matrix{Float64}; scale::Float64     = NaN,
                                                  tol::Float64       = 0.0, 
                                                  n::Int64           = 32,
                                                  kappa_min::Float64 = 0.1, 
-                                                 grid::Int64        = 201, 
-                                                 pad::Real          = 1.1, 
-                                                 rtol::Real         = 1e-8,
+                                                 rtol::Float64      = 1e-8,
                                                  rng::AbstractRNG   = Random.default_rng())
    if n ≤ 0
       throw(ArgumentError("need at least one realisation; got n = $n."))
@@ -392,13 +332,12 @@ function explore(model, images::Matrix{Float64}; scale::Float64     = NaN,
    
    space = init_DegeneracySpace(basis, images; rtol = rtol)
 
-   x, y = _map_grid(images, grid, pad)
-   X, Y = _mesh(x, y)
-   kappa_M = model_kappa(model, X, Y)
+   X, Y = model.grid_x, model.grid_y
+   kappa_M = model.kappa
 
    # The exact null space sets the amplitude, because positivity -- not the images -- is what
    # bounds it, and because the cap is what makes `tol` an arcsecond rather than a bare number.
-   gs = [randn(rng, length(basis)) for _ in 1:n]
+   gs = [randn(rng, length(basis.x_c)) for _ in 1:n]
    raw = [init_ShaDes(basis, _draw(space, g, 0.0), images) for g in gs]
    cap = _ensemble_cap(raw, kappa_M, X, Y, kappa_min)
 
@@ -406,11 +345,7 @@ function explore(model, images::Matrix{Float64}; scale::Float64     = NaN,
    # changes what `tol` arcsec means.  Two passes are enough: the cap moves by ~15 % on the first
    # and by under a per cent on the second.
    if tol > 0
-      B = _kappa_operator(basis, _mesh(_map_grid(images, RELAX_GRID, pad)...)...)
-      for _ in 1:2
-         raw = [init_ShaDe(basis, _relaxed_draw(space, B, g, cap, tol), images) for g in gs]
-         cap = _ensemble_cap(raw, kappa_M, X, Y, kappa_min)
-      end
+      throw(ArgumentError("tol > 0 not implemented in this version; use tol = 0."))
    end
 
    shades = [rescale(s, cap / sqrt(mean(abs2, shade_kappa(s, X, Y)))) for s in raw]
