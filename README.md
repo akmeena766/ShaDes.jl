@@ -1,5 +1,8 @@
 # ShaDes
-[![Build Status](https://github.com/akmeena766/ShaDes.jl/actions/workflows/CI.yml/badge.svg?branch=main)](https://github.com/akmeena766/ShaDes.jl/actions/workflows/CI.yml?query=branch%3Amain)
+[![Build status (Github Actions)](https://github.com/akmeena766/ShaDes.jl/workflows/CI/badge.svg)](https://github.com/akmeena766/ShaDes.jl/actions)
+[![codecov.io](http://codecov.io/github/akmeena766/ShaDes.jl/coverage.svg?branch=main)](http://codecov.io/github/akmeena766/ShaDes.jl?branch=main)
+[![](https://img.shields.io/badge/docs-stable-blue.svg)](https://akmeena766.github.io/ShaDes.jl/stable)
+
 ---
 
 # ShaDes.jl - Shape Degeneracies of a strong-lensing mass model
