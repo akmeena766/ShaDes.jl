@@ -31,7 +31,7 @@ function init_BestModel(D_d::Float64, lens::Lenses.AbstractLens, θx::Matrix{Flo
    else
       throw(ArgumentError("grid_x and grid_y must have the same shape; got $(size(θx)) and $(size(θy))."))
    end
-   return init_BestModel(D_d, θx, θy, kappa)
+   return init_BestModel(D_d, θx, θy, κ)
 end
 
 
@@ -56,16 +56,14 @@ function init_PlummerBasis(D_d::Float64, images::Matrix{Float64}; scale::Float64
    scale   = isnan(scale) ? 0.5 * critical_scale(images) : scale
    core    = isnan(core) ? 1.5 * scale : core
    centres = grid_centres(images, scale)
-   mass    = size(centres, 1)
-   x_s     = fill(float(core), mass)
+   m       = size(centres, 1)
+   x_s     = fill(float(core), m)
    return init_PlummerBasis(D_d=D_d, x_c=centres[:, 1], y_c=centres[:, 2], x_s=x_s)
 end
 
 
 
-function enclosing_ellipse(images::Matrix{Float64}; inflate::Float64 = 1.1, 
-                                                    tol::Float64     = 1E-7,
-                                                    maxiter::Int64   = 10_000)
+function enclosing_ellipse(images::Matrix{Float64}; inflate::Float64=1.1, tol::Float64=1E-7, maxiter::Int64=10_000)
    # Check if we have more than one image
    n, d = size(images, 1), size(images, 2)
    if n < 4
@@ -291,8 +289,8 @@ struct init_ShaDesEnsemble
    space::init_DegeneracySpace
    shades::Vector{init_ShaDes}
    cap::Float64
-   x::Vector{Float64}
-   y::Vector{Float64}
+   grid_x::Vector{Float64}
+   grid_y::Vector{Float64}
    kappa_M::Matrix{Float64}
 end
 
@@ -324,12 +322,7 @@ function explore(model, images::Matrix{Float64}; scale::Float64     = NaN,
       throw(ArgumentError("need at least one realisation; got n = $n."))
    end
 
-   if isnan(scale) 
-      scale = 0.5 * critical_scale(images)
-   end
-
    basis = init_PlummerBasis(model.D_d, images; scale=scale, core=core)
-   
    space = init_DegeneracySpace(basis, images; rtol = rtol)
 
    X, Y = model.grid_x, model.grid_y
@@ -349,7 +342,7 @@ function explore(model, images::Matrix{Float64}; scale::Float64     = NaN,
    end
 
    shades = [rescale(s, cap / sqrt(mean(abs2, shade_kappa(s, X, Y)))) for s in raw]
-   return init_ShaDesEnsemble(space, shades, cap, x, y, kappa_M)
+   return init_ShaDesEnsemble(space, shades, cap, X, Y, kappa_M)
 end
 
 
