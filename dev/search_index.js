@@ -1,0 +1,3 @@
+var documenterSearchIndex = {"docs":
+[{"category":"section","location":"#ShaDes.jl","page":"Home","text":"(Image: Build status (Github Actions)) (Image: codecov.io)\n\n","title":"ShaDes.jl"},{"category":"section","location":"#Introduction","page":"Home","text":"Given a best-fit model and the observed image positions, find the perturbations the data cannot see. A perturbation P leaves every image exactly where it is when its deflection vanishes there, i.e.,\n\nbeginequation\nboldsymbolalpha_P(boldsymboltheta_i) = 0  qquad i = 1 2 dots N\nendequation\n\nwhere boldsymbolalpha_P is the deflection angle field corresponding to perturbation P and  boldsymboltheta_i is the position of the i-th image. ","title":"Introduction"}]
+}
