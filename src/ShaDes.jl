@@ -289,8 +289,8 @@ struct init_ShaDesEnsemble
    space::init_DegeneracySpace
    shades::Vector{init_ShaDes}
    cap::Float64
-   grid_x::Vector{Float64}
-   grid_y::Vector{Float64}
+   grid_x::Matrix{Float64}
+   grid_y::Matrix{Float64}
    kappa_M::Matrix{Float64}
 end
 
