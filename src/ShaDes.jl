@@ -276,6 +276,24 @@ end
 
 
 """
+    shade_kappa(shade::init_ShaDes, θx::AbstractMatrix, θy::AbstractMatrix)
+Convergence of the perturbation on a meshgrid, ``\\Delta\\kappa``.
+
+# Arguments
+- `shade::init_ShaDes`: The ShaDes object.
+- `θx::AbstractMatrix`: x-coordinates of the grid points (in arcseconds).
+- `θy::AbstractMatrix`: y-coordinates of the grid points (in arcseconds).
+
+# Returns
+- `Matrix{Float64}`: Convergence values on the grid.
+"""
+function shade_kappa(shade::init_ShaDes, θx::Matrix{Float64}, θy::Matrix{Float64})
+   κ, _, _ = Lenses.get_kappa_gamma(shade_lens(shade), θx, θy, 1.0)
+   return κ
+end
+
+
+"""
     total_mass(shade::init_ShaDes)
 Mass moved around by the ShaDes perturbations, ``\\sum_j |m_j|`` (in ``\\rm \\mathbf{M_\\odot}``).
 
@@ -305,6 +323,20 @@ function net_mass(shade::init_ShaDes)
    return sum(shade.masses)
 end
 
+
+"""
+    rescale(shade::init_ShaDes, factor::Real)
+Scale the whole perturbation. Still an exact degeneracy as the constraint is linear, so any
+multiple of a solution is a solution.  The amplitude is fixed by `amplitude_cap`, not by the 
+images.
+
+# Arguments
+- `shade::init_ShaDes`: The ShaDes object.
+- `factor::Float64`: The scaling factor.
+
+# Returns
+- `init_ShaDes`: The rescaled ShaDes object.
+"""
 function rescale(shade::init_ShaDes, factor::Float64)
    return init_ShaDes(shade.basis, factor .* shade.masses, shade.images)
 end
@@ -312,7 +344,20 @@ end
 
 """
     image_residuals(shade::init_ShaDes)
+Calculate the deflection that each perturbation adds at each constrained image, 
+``N \\times 2`` (in ``\\rm \\mathbf{arcseconds}``).
 
+This is the net deflection at each image position after all perturbations are added. 
+At `tol = 0` this should be zero.  At `tol > 0` it is the budget that was asked for, and is 
+the honest quantity to quote: a model fits images to a finite rms and anything inside it is 
+an equally good fit.
+
+# Arguments
+- `shade::init_ShaDes`: The ShaDes object.
+
+# Returns
+- `Matrix{Float64}`: An `N x 2` matrix where each row is the deflection `(ax, ay)` at the 
+   corresponding image position.
 """
 function image_residuals(shade::init_ShaDes)
    lens = shade_lens(shade)
@@ -326,11 +371,33 @@ function image_residuals(shade::init_ShaDes)
    return r
 end
 
-function shade_kappa(shade::init_ShaDes, X::Matrix{Float64}, Y::Matrix{Float64})
-   κ, _, _ = Lenses.get_kappa_gamma(shade_lens(shade), X, Y, 1.0)
-   return κ
-end
 
+"""
+    amplitude_cap(shade::init_ShaDes, 
+                  kappa_M::Matrix{Float64}, 
+                  θx::Matrix{Float64}, 
+                  θy::Matrix{Float64};
+                  kappa_min::Real = 0.1)
+Largest ``\\rm rms\\,\\Delta\\kappa`` at which this perturbation still keeps the total convergence
+positive, ``\\kappa_M + \\Delta\\kappa > 0``, everywhere the model has mass.
+
+This is the real bound on a shape degeneracy.  The images give none: the constraint matrix is rank
+deficient, so a null-space member scales freely and reproduces every image at any amplitude.
+Positivity is what stops it.
+
+# Arguments
+- `shade`   : The perturbation, at any amplitude (the cap is scale free).
+- `kappa_M` : Convergence of the best-fit model on the same grid.
+- `θx`      : x-component of the meshgrid (in ``\\rm \\mathbf{arcseconds}``).
+- `θy`      : y-component of the meshgrid (in ``\\rm \\mathbf{arcseconds}``).
+
+# Keyword Arguments
+- `kappa_min`: Only pixels with `kappa_M > kappa_min` are tested, so that the empty outskirts --
+               where any negative perturbation violates positivity trivially -- do not set it.
+
+# Returns
+- `cap`: Cap on ``\\rm rms\\,\\Delta\\kappa``, or `Inf` if the perturbation is nowhere negative.
+"""
 function amplitude_cap(shade::init_ShaDes, kappa_M::Matrix{Float64}, X::Matrix{Float64}, Y::Matrix{Float64};
                        kappa_min::Float64 = 0.1)
    dk = shade_kappa(shade, X, Y)

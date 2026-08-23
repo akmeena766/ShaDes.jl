@@ -18,7 +18,7 @@ $\boldsymbol{\theta}_i$ is the position of the $i$-th image.
 
 
 ---
-## Best-fit mode
+## Best-fit model
 ```@docs
 ShaDes.init_BestModel
 ```
@@ -40,6 +40,10 @@ ShaDes.init_DegeneracySpace
 ```@docs
 ShaDes.init_ShaDes
 ShaDes.shade_lens
+ShaDes.shade_kappa
 ShaDes.total_mass
 ShaDes.net_mass
+ShaDes.rescale
+ShaDes.image_residuals
+ShaDes.amplitude_cap
 ```
