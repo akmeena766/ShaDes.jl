@@ -18,6 +18,19 @@ $\boldsymbol{\theta}_i$ is the position of the $i$-th image.
 
 
 ---
+## Best-fit mode
 ```@docs
 ShaDes.init_BestModel
+```
+
+---
+## Basis functions
+```@docs
+ShaDes.init_PlummerBasis
+```
+
+---
+## Degeneracy space
+```@docs
+ShaDes.init_DegeneracySpace
 ```

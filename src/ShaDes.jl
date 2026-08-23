@@ -20,9 +20,6 @@ export init_DegeneracySpace
 # --------------------------------------------------------------------------------------------------
 # Best-model
 # --------------------------------------------------------------------------------------------------
-"""
-    init_BestModel(D_d::Float64, lens::Lenses.AbstractLens, θx::Matrix{Float64}, θy::Matrix{Float64})
-"""
 struct init_BestModel
    D_d::Float64
    grid_x::Matrix{Float64}
@@ -30,9 +27,12 @@ struct init_BestModel
    kappa::Matrix{Float64}
 end
 
-# """
-#     init_BestModel(D_d::Float64, lens::Lenses.AbstractLens, θx::Matrix{Float64}, θy::Matrix{Float64})
-# """
+"""
+    init_BestModel(D_d::Float64, 
+                   lens::LensFactory.Lenses.AbstractLens, 
+                   θx::Matrix{Float64}, 
+                   θy::Matrix{Float64})
+"""
 function init_BestModel(D_d::Float64, lens::Lenses.AbstractLens, θx::Matrix{Float64}, θy::Matrix{Float64})
    if size(θx) == size(θy)
       κ, _, _ = Lenses.get_kappa_gamma(lens, θx, θy, 1.0)
@@ -46,6 +46,7 @@ end
 # --------------------------------------------------------------------------------------------------
 # Perturbation basis
 # --------------------------------------------------------------------------------------------------
+
 struct init_PlummerBasis
    D_d::Float64
    x_c::Vector{Float64}
@@ -53,6 +54,12 @@ struct init_PlummerBasis
    x_s::Vector{Float64}
 end
 
+"""
+    init_PlummerBasis(; D_d::Float64         = NaN, 
+                        x_c::Vector{Float64} = Float64[], 
+                        y_c::Vector{Float64} = Float64[], 
+                        x_s::Vector{Float64} = Float64[])
+"""
 function init_PlummerBasis(; D_d::Float64 = NaN, x_c::Vector{Float64}=Float64[], y_c::Vector{Float64}=Float64[], x_s::Vector{Float64}=Float64[])
    if !(length(x_c) == length(y_c) == length(x_s))
       throw(ArgumentError("x_c, y_c and x_s must have the same length (one entry per component)."))
@@ -60,6 +67,12 @@ function init_PlummerBasis(; D_d::Float64 = NaN, x_c::Vector{Float64}=Float64[],
    return init_PlummerBasis(D_d, x_c, y_c, x_s)
 end
 
+"""
+    init_PlummerBasis(D_d::Float64, 
+                      images::Matrix{Float64}; 
+                      scale::Float64 = NaN, 
+                      core::Float64  = NaN)
+"""
 function init_PlummerBasis(D_d::Float64, images::Matrix{Float64}; scale::Float64=NaN, core::Float64=NaN)
    scale   = isnan(scale) ? 0.5 * critical_scale(images) : scale
    core    = isnan(core) ? 1.5 * scale : core
@@ -150,6 +163,17 @@ struct init_DegeneracySpace
    rtol::Float64
 end
 
+"""
+    init_DegeneracySpace(basis::init_PlummerBasis, 
+                         images::Matrix{Float64}; 
+                         rtol::Float64 = 1E-8)
+"""
+function init_DegeneracySpace(basis::init_PlummerBasis, images::Matrix{Float64}; rtol::Float64=1e-8)
+   A = constraint_matrix(basis, images)
+   F = svd(A; full=true)
+   return init_DegeneracySpace(basis, images, F.U, F.S, F.Vt, rtol)
+end
+
 
 function constraint_matrix(basis::init_PlummerBasis, images::Matrix{Float64})
    n = size(images, 1)
@@ -164,13 +188,6 @@ function constraint_matrix(basis::init_PlummerBasis, images::Matrix{Float64})
       end
    end
    return A
-end
-
-
-function init_DegeneracySpace(basis::init_PlummerBasis, images::Matrix{Float64}; rtol::Float64=1e-8)
-   A = constraint_matrix(basis, images)
-   F = svd(A; full=true)
-   return init_DegeneracySpace(basis, images, F.U, F.S, F.Vt, rtol)
 end
 
 
