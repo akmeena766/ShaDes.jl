@@ -17,3 +17,7 @@ where $\boldsymbol{\alpha}_P$ is the deflection angle field corresponding to per
 $\boldsymbol{\theta}_i$ is the position of the $i$-th image. 
 
 
+---
+```@docs
+ShaDes.init_BestModel
+```

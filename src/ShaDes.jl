@@ -13,11 +13,16 @@ using LensFactory
 # --------------------------------------------------------------------------------------------------
 # Functions to export
 # --------------------------------------------------------------------------------------------------
-
+export init_BestModel
+export init_PlummerBasis
+export init_DegeneracySpace
 
 # --------------------------------------------------------------------------------------------------
 # Best-model
 # --------------------------------------------------------------------------------------------------
+"""
+    init_BestModel(D_d::Float64, lens::Lenses.AbstractLens, θx::Matrix{Float64}, θy::Matrix{Float64})
+"""
 struct init_BestModel
    D_d::Float64
    grid_x::Matrix{Float64}
@@ -25,6 +30,9 @@ struct init_BestModel
    kappa::Matrix{Float64}
 end
 
+# """
+#     init_BestModel(D_d::Float64, lens::Lenses.AbstractLens, θx::Matrix{Float64}, θy::Matrix{Float64})
+# """
 function init_BestModel(D_d::Float64, lens::Lenses.AbstractLens, θx::Matrix{Float64}, θy::Matrix{Float64})
    if size(θx) == size(θy)
       κ, _, _ = Lenses.get_kappa_gamma(lens, θx, θy, 1.0)
