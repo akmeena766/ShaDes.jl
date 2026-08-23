@@ -34,3 +34,12 @@ ShaDes.init_PlummerBasis
 ```@docs
 ShaDes.init_DegeneracySpace
 ```
+
+---
+## Degeneracy realization
+```@docs
+ShaDes.init_ShaDes
+ShaDes.shade_lens
+ShaDes.total_mass
+ShaDes.net_mass
+```

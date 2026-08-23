@@ -237,12 +237,17 @@ end
 # --------------------------------------------------------------------------------------------------
 # Realization
 # --------------------------------------------------------------------------------------------------
+"""
+    init_ShaDes(basis::init_PlummerBasis, 
+                masses::Vector{Float64}, 
+                images::Matrix{Float64})
+"""
 struct init_ShaDes
    basis::init_PlummerBasis
    masses::Vector{Float64}
    images::Matrix{Float64}
 
-   function init_ShaDes(basis::init_PlummerBasis, masses, images)
+   function init_ShaDes(basis::init_PlummerBasis, masses::Vector{Float64}, images::Matrix{Float64})
       length(masses) == length(basis.x_c) ||
          throw(ArgumentError("need one mass per component; got $(length(masses)) for " *
                              "$(length(basis.x_c)) components."))
@@ -251,6 +256,16 @@ struct init_ShaDes
 end
 
 
+"""
+    shade_lens(shade::init_ShaDes)
+Construct a `LensFactory.Lenses.MultiPlummerLens` from the ShaDes object.
+
+# Arguments
+- `shade::init_ShaDes`: The ShaDes object.
+
+# Returns
+- `Lenses.MultiPlummerLens`: The `LensFactory.Lenses.init_MultiPlummerLens` object.
+"""
 function shade_lens(shade::init_ShaDes)
    return Lenses.init_MultiPlummerLens(D_d = shade.basis.D_d, 
                                        x_c = shade.basis.x_c,
@@ -259,10 +274,33 @@ function shade_lens(shade::init_ShaDes)
                                        x_s = shade.basis.x_s)
 end
 
+
+"""
+    total_mass(shade::init_ShaDes)
+Mass moved around by the ShaDes perturbations, ``\\sum_j |m_j|`` (in ``\\rm \\mathbf{M_\\odot}``).
+
+# Arguments
+- `shade::init_ShaDes`: The ShaDes object.
+
+# Returns
+- `Float64`: The total mass moved around by the ShaDes perturbations.
+"""
 function total_mass(shade::init_ShaDes)
    return sum(abs, shade.masses)
 end
 
+
+"""
+    net_mass(shade::init_ShaDes)
+Mass added on balance, ``\\sum_j m_j`` (in ``\\rm \\mathbf{M_\\odot}``).  Much smaller than
+`total_mass` as the degeneracy mostly rearranges mass rather than adding it.
+
+# Arguments
+- `shade::init_ShaDes`: The ShaDes object.
+
+# Returns
+- `Float64`: The net mass added by the ShaDes perturbations.
+"""
 function net_mass(shade::init_ShaDes)
    return sum(shade.masses)
 end
@@ -271,6 +309,11 @@ function rescale(shade::init_ShaDes, factor::Float64)
    return init_ShaDes(shade.basis, factor .* shade.masses, shade.images)
 end
 
+
+"""
+    image_residuals(shade::init_ShaDes)
+
+"""
 function image_residuals(shade::init_ShaDes)
    lens = shade_lens(shade)
    n = size(shade.images, 1)
