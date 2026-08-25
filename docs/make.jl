@@ -1,14 +1,17 @@
 using Documenter
 using ShaDes
+using Makie
 
 makedocs(
    sitename = "ShaDes.jl",
-   modules = [ShaDes],
-   format = Documenter.HTML(; collapselevel = 1, 
-                              assets = ["assets/custom.css"],
-                              prettyurls = get(ENV, "CI", nothing) == "true"),
+   modules  = [ShaDes,
+               Base.get_extension(ShaDes, :PlotExt)],
+   format   = Documenter.HTML(; collapselevel = 1, 
+                                assets = ["assets/custom.css"],
+                                prettyurls = get(ENV, "CI", nothing) == "true"),
    pages = [
          "Home" => "index.md",
+         "Plot Extension" => "plot.md"
       ]
 )
 

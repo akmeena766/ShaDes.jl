@@ -75,7 +75,6 @@ and the plot is the visual form of `ShaDes.image_motion`.
 - `figure_size::NTuple{2, Real} = (560, 520)`
 - `heatmap_kws::NamedTuple = (colormap = :vik,)` -- `colorrange` is set from `clip_quantile` and
   should be left out; any diverging map with a neutral midpoint is fine, a rainbow map is not
-- `limits::Union{Nothing, NTuple{4, Real}} = nothing` -- `(xlo, xhi, ylo, yhi)`; defaults to the grid
 - `save_plot::Bool = false`
    - `plot_name::String = "shade.png"`
    - `resolution::Int64 = 2`
@@ -94,7 +93,6 @@ function ShaDes.plot_shade(shade::ShaDes.init_ShaDes, θx::Matrix{Float64}, θy:
                            clip_quantile::Float64                   = 0.99,
                            figure_size::NTuple{2, Real}             = (560, 520),
                            heatmap_kws::NamedTuple                  = (colormap = :vik,),
-                           limits::Union{Nothing, NTuple{4, Real}}  = nothing,
                            save_plot::Bool                          = false,
                            plot_name::String                        = "shade.png",
                            resolution::Int64                        = 2)
@@ -198,16 +196,11 @@ function ShaDes.plot_shade(shade::ShaDes.init_ShaDes, θx::Matrix{Float64}, θy:
 
    # Set axis labels and limits.  `gnomonic_offsets_arcsec` is north-up / east-left with x towards
    # west, so x increasing rightwards is already the conventional sky orientation -- do not flip it.
-   ax.xlabel = "θ₁ (in arcseconds)"
-   ax.ylabel = "θ₂ (in arcseconds)"
-   ax.aspect = DataAspect()
-   if limits === nothing
-      xlims!(ax, minimum(θx), maximum(θx))
-      ylims!(ax, minimum(θy), maximum(θy))
-   else
-      xlims!(ax, limits[1], limits[2])
-      ylims!(ax, limits[3], limits[4])
-   end
+   ax.xlabel = L"θ_x~\text{(in arcseconds)}"
+   ax.ylabel = L"θ_y~\text{(in arcseconds)}"
+
+   xlims!(ax, minimum(θx), maximum(θx))
+   ylims!(ax, minimum(θy), maximum(θy))
 
    if save_plot
       save(plot_name, fig, px_per_unit = resolution)
