@@ -24,6 +24,12 @@ ShaDes.init_BestModel
 ```
 
 ---
+## Lensed image constraints
+```@docs
+ShaDes.init_SourceSet
+```
+
+---
 ## Basis functions
 ```@docs
 ShaDes.init_PlummerBasis

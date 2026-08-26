@@ -1,4 +1,5 @@
 using Documenter
+using LensFactory
 using ShaDes
 using Makie
 

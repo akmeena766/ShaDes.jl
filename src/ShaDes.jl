@@ -14,6 +14,7 @@ using LensFactory
 # Functions to export
 # --------------------------------------------------------------------------------------------------
 export init_BestModel
+export init_SourceSet
 export init_PlummerBasis
 export init_DegeneracySpace
 
@@ -31,6 +32,7 @@ function plot_shade end
 # --------------------------------------------------------------------------------------------------
 struct init_BestModel
    D_d::Float64
+   lens::LensFactory.Lenses.AbstractLens
    grid_x::Matrix{Float64}
    grid_y::Matrix{Float64}
    kappa::Matrix{Float64}
@@ -38,9 +40,16 @@ end
 
 """
     init_BestModel(D_d::Float64, 
-                   lens::LensFactory.Lenses.AbstractLens, 
-                   θx::Matrix{Float64}, 
+                   lens::LensFactory.Lenses.AbstractLens,
+                   θx::Matrix{Float64},
                    θy::Matrix{Float64})
+Store the best-fit lens model, its grid, and its convergence on that grid.
+
+# Arguments
+- `D_d` : ADD to the lens (in ``\\rm \\mathbf{meters}``).
+- `lens`: The `LensFactory.jl` best-fit lens model.
+- `θx`  : x-grid (in ``\\rm \\mathbf{arcseconds}``).
+- `θy`  : y-grid (in ``\\rm \\mathbf{arcseconds}``).
 """
 function init_BestModel(D_d::Float64, lens::Lenses.AbstractLens, θx::Matrix{Float64}, θy::Matrix{Float64})
    if size(θx) == size(θy)
@@ -48,14 +57,55 @@ function init_BestModel(D_d::Float64, lens::Lenses.AbstractLens, θx::Matrix{Flo
    else
       throw(ArgumentError("grid_x and grid_y must have the same shape; got $(size(θx)) and $(size(θy))."))
    end
-   return init_BestModel(D_d, θx, θy, κ)
+   return init_BestModel(D_d, lens, θx, θy, κ)
+end
+
+
+# --------------------------------------------------------------------------------------------------
+# Image constraints
+# --------------------------------------------------------------------------------------------------
+# Column layout of the observation table.  One row per observed image.
+const COL_SRC  = 1
+const COL_KNOT = 2
+const COL_OBSX = 3
+const COL_OBSY = 4
+const COL_SRCX = 5
+const COL_SRCY = 6
+
+"""
+    init_SourceSet(data::Matrix{Float64}, adis::Vector{Float64})
+Store the lensed image constraints. The input data is a ``N_{\\rm knot} \\times 6`` Matrix table 
+with columns `src_id`, `knot_id`, `obs_x`, `obs_y`, `src_x`, `src_y` (in ``\\rm \\mathbf{arcseconds}``).
+
+# Arguments
+- `data` : ``N_{\\rm knot} \\times 6`` matrix.
+- `adis` : ``N_{\\rm src}`` vector of distance ratios, indexed by `src_id`.
+"""
+struct init_SourceSet
+   data::Matrix{Float64}
+   adis::Vector{Float64}
+
+   function init_SourceSet(data::Matrix{Float64}, adis::Vector{Float64})
+      size(data, 2) == 6 || throw(ArgumentError("data must have 6 columns " *
+                                  "(src_id, knot_id, obs_x, obs_y, src_x, src_y); got $(size(data, 2))."))
+      size(data, 1) ≥ 1 || throw(ArgumentError("data has no rows."))
+ 
+      all(x -> x ≥ 1 && x == round(x), @view data[:, COL_SRC:COL_KNOT]) ||
+         throw(ArgumentError("src_id and knot_id must be positive whole numbers."))
+ 
+      n_src = Int64(maximum(@view data[:, COL_SRC]))
+      length(adis) ≥ n_src ||
+         throw(ArgumentError("adis must cover every source in the table; got $(length(adis)) " *
+                             "entries but src_id runs up to $(n_src)."))
+ 
+      return new(copy(data), copy(adis))
+   end
 end
 
 
 # --------------------------------------------------------------------------------------------------
 # Perturbation basis
 # --------------------------------------------------------------------------------------------------
-
 struct init_PlummerBasis
    D_d::Float64
    x_c::Vector{Float64}
@@ -234,15 +284,6 @@ function sample_masses(space::init_DegeneracySpace; relax::Float64=0.0, rng::Abs
 end
 
 
-function image_motion(space::init_DegeneracySpace, masses::Vector{Float64})
-   n = size(space.images, 1)
-   ns = length(space.S)
-   c = (space.Vt * masses)[1:ns] .* space.S
-   d = space.U[:, 1:ns] * c
-   return maximum(hypot(d[i], d[n + i]) for i in 1:n)
-end
-
-
 # --------------------------------------------------------------------------------------------------
 # Realization
 # --------------------------------------------------------------------------------------------------
@@ -281,6 +322,28 @@ function shade_lens(shade::init_ShaDes)
                                        y_c = shade.basis.y_c, 
                                        mass = shade.masses,
                                        x_s = shade.basis.x_s)
+end
+
+
+"""
+    total_lens(shade::init_ShaDes, model::init_BestModel)
+Construct the perturbed lens, ``M + P``, as a `LensFactory.Lenses.init_CompositeLens`.  A composite
+best-fit model is flattened rather than nested, since `LensFactory` walks `_components_` only one
+level deep.
+"""
+function total_lens(shade::init_ShaDes, model::init_BestModel)
+   # Initialize the parts array using a standard if condition
+   if model.lens._lens_ == :CompositeLens
+      parts = copy(model.lens._components_)
+   else
+      parts = Lenses.AbstractLens[model.lens]
+   end
+
+   # Add the shade lens
+   push!(parts, shade_lens(shade))
+
+   # Return the updated composite lens
+   return Lenses.init_CompositeLens(_components_ = parts)
 end
 
 
@@ -381,6 +444,8 @@ function image_residuals(shade::init_ShaDes)
 end
 
 
+
+
 """
     amplitude_cap(shade::init_ShaDes, 
                   kappa_M::Matrix{Float64}, 
@@ -425,69 +490,6 @@ function amplitude_cap(shade::init_ShaDes, kappa_M::Matrix{Float64}, X::Matrix{F
    return cap
 end
 
-
-# --------------------------------------------------------------------------------------------------
-# Ensemble
-# --------------------------------------------------------------------------------------------------
-struct init_ShaDesEnsemble
-   space::init_DegeneracySpace
-   shades::Vector{init_ShaDes}
-   cap::Float64
-   grid_x::Matrix{Float64}
-   grid_y::Matrix{Float64}
-   kappa_M::Matrix{Float64}
-end
-
-
-function _ensemble_cap(shades::Vector{<:init_ShaDes}, kappa_M::Matrix, X::Matrix{Float64},
-                       Y::Matrix{Float64}, kappa_min::Float64)
-   caps = filter(isfinite, [amplitude_cap(s, kappa_M, X, Y; kappa_min = kappa_min) for s in shades])
-   if isempty(caps)
-      throw(ErrorException("positivity gives no bound: no realisation lowers kappa anywhere " *
-            "with kappa_M > $(kappa_min).  The model's convergence peaks at " *
-            "$(round(maximum(kappa_M), digits = 3)) on a grid spanning " *
-            "$(round(extrema(X)[2] - extrema(X)[1], digits = 1)) x " *
-            "$(round(extrema(Y)[2] - extrema(Y)[1], digits = 1)) arcsec.  If that peak is ~0 the " *
-            "model or the image coordinates are wrong; if the grid is not tens of arcsec across, " *
-            "the image positions are."))
-   end
-   return median(caps)
-end
-
-
-function explore(model, images::Matrix{Float64}; scale::Float64     = NaN, 
-                                                 core::Float64      = NaN, 
-                                                 tol::Float64       = 0.0, 
-                                                 n::Int64           = 32,
-                                                 kappa_min::Float64 = 0.1, 
-                                                 rtol::Float64      = 1e-8,
-                                                 rng::AbstractRNG   = Random.default_rng())
-   if n ≤ 0
-      throw(ArgumentError("need at least one realisation; got n = $n."))
-   end
-
-   basis = init_PlummerBasis(model.D_d, images; scale=scale, core=core)
-   space = init_DegeneracySpace(basis, images; rtol = rtol)
-
-   X, Y = model.grid_x, model.grid_y
-   kappa_M = model.kappa
-
-   # The exact null space sets the amplitude, because positivity -- not the images -- is what
-   # bounds it, and because the cap is what makes `tol` an arcsecond rather than a bare number.
-   gs = [randn(rng, length(basis.x_c)) for _ in 1:n]
-   raw = [init_ShaDes(basis, _draw(space, g, 0.0), images) for g in gs]
-   cap = _ensemble_cap(raw, kappa_M, X, Y, kappa_min)
-
-   # Relaxing the constraint changes which directions are drawn, which changes the cap, which
-   # changes what `tol` arcsec means.  Two passes are enough: the cap moves by ~15 % on the first
-   # and by under a per cent on the second.
-   if tol > 0
-      throw(ArgumentError("tol > 0 not implemented in this version; use tol = 0."))
-   end
-
-   shades = [rescale(s, cap / sqrt(mean(abs2, shade_kappa(s, X, Y)))) for s in raw]
-   return init_ShaDesEnsemble(space, shades, cap, X, Y, kappa_M)
-end
 
 
 end
