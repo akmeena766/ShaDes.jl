@@ -46,6 +46,7 @@ ShaDes.init_DegeneracySpace
 ```@docs
 ShaDes.init_ShaDes
 ShaDes.shade_lens
+ShaDes.total_lens
 ShaDes.shade_kappa
 ShaDes.total_mass
 ShaDes.net_mass
