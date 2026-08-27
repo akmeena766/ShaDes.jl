@@ -444,14 +444,14 @@ function image_residuals(shade::init_ShaDes)
 end
 
 
-
-
+# --------------------------------------------------------------------------------------------------
+# Positivity check
+# --------------------------------------------------------------------------------------------------
 """
-    amplitude_cap(shade::init_ShaDes, 
-                  kappa_M::Matrix{Float64}, 
-                  θx::Matrix{Float64}, 
-                  θy::Matrix{Float64};
-                  kappa_min::Real = 0.1)
+    cap_positivity(shade::init_ShaDes, 
+                   model::init_BestModel; 
+                   kappa_min::Float64 = 0.0,
+                   safety::Float64    = 1.0)
 Largest ``\\rm rms\\,\\Delta\\kappa`` at which this perturbation still keeps the total convergence
 positive, ``\\kappa_M + \\Delta\\kappa > 0``, everywhere the model has mass.
 
@@ -472,22 +472,74 @@ Positivity is what stops it.
 # Returns
 - `cap`: Cap on ``\\rm rms\\,\\Delta\\kappa``, or `Inf` if the perturbation is nowhere negative.
 """
-function amplitude_cap(shade::init_ShaDes, kappa_M::Matrix{Float64}, X::Matrix{Float64}, Y::Matrix{Float64};
-                       kappa_min::Float64 = 0.1)
-   dk = shade_kappa(shade, X, Y)
+function cap_positivity(shade::init_ShaDes, model::init_BestModel; kappa_min::Float64 = 0.0, safety::Float64 = 1.0)
+   if (safety <= 0.0 || safety > 1.0)
+      throw(ArgumentError("safety must lie in (0, 1]; got $safety."))
+   end
+
+   dk = shade_kappa(shade, model.grid_x, model.grid_y)
+   nx, ny = size(dk)
    rms = sqrt(mean(abs2, dk))
    if rms ≤ 0
       throw(ErrorException("perturbation has zero convergence."))
    end
-   dk ./= rms
 
-   cap = Inf
-   @inbounds for k in eachindex(dk)
-      if (kappa_M[k] > kappa_min && dk[k] < 0)
-         cap = min(cap, kappa_M[k] / -dk[k])
+   # Check if all pixels have κ ≥ 0. Otherwise throw a warning
+   n_hole = 0
+   @inbounds for j in 1:ny
+      @inbounds for i in 1:nx
+         if model.kappa[i, j] ≤ 0
+            n_hole = n_hole + 1
+         end
       end
    end
-   return cap
+   if n_hole > 0
+      @warn "the model has $(n_hole) pixel(s) with kappa <= 0, which are skipped: positivity " *
+            "cannot be asked where there is no mass.  If this is most of the grid, check the " *
+            "model."
+   end
+
+   # Calculate the amplitude cap
+   factor, i_b, j_b = Inf, 0, 0
+   @inbounds for j in 1:ny
+      for i in 1:nx
+         if model.kappa[i, j] > kappa_min && dk[i, j] < 0
+            a = model.kappa[i, j] / -dk[i, j]
+            if a < factor
+               factor, i_b, j_b = a, i, j
+            end
+         end
+      end
+   end
+
+   if !isfinite(factor)
+      throw(ErrorException("positivity gives no bound. The model's convergence peaks " *
+            "at $(round(maximum(model.kappa), digits = 3)); if that is ~0 the model " *
+            "or the image coordinates are wrong."))
+   end
+
+   binding = (model.grid_x[i_b, j_b], model.grid_y[i_b, j_b], model.kappa[i_b, j_b])
+   return rescale(shade, safety * factor), factor * rms, binding
+end
+
+
+# --------------------------------------------------------------------------------------------------
+# Multiplicity check
+# --------------------------------------------------------------------------------------------------
+function _is_closed(curve)
+   if length(curve) >= 4 && curve[1] == curve[end]
+      return true
+   else
+      return false
+   end
+end
+
+function multiplicity(lens::Lenses.AbstractLens, model::init_BestModel, sources::init_SourceSet;
+                      n_far::Int64 = 1)
+   θx, θy = model.grid_x, model.grid_y
+   ψxx, ψyy, ψxy = Lenses.get_jacobian(lens, θx, θy)
+
+
 end
 
 

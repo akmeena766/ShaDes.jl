@@ -42,6 +42,12 @@ ShaDes.init_DegeneracySpace
 ```
 
 ---
+## Constraints
+```@docs
+ShaDes.cap_positivity
+```
+
+---
 ## Degeneracy realization
 ```@docs
 ShaDes.init_ShaDes
@@ -52,5 +58,4 @@ ShaDes.total_mass
 ShaDes.net_mass
 ShaDes.rescale
 ShaDes.image_residuals
-ShaDes.amplitude_cap
 ```
