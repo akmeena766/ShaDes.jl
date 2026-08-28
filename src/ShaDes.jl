@@ -23,8 +23,10 @@ export init_DegeneracySpace
 # Plotting support
 # --------------------------------------------------------------------------------------------------
 export plot_shade
+export plot_caustic
 
 function plot_shade end
+function plot_caustic end
 
 
 # --------------------------------------------------------------------------------------------------
@@ -111,6 +113,58 @@ function knot_table(sources::init_SourceSet)
    return unique(sources.data[:, [COL_SRC, COL_KNOT, COL_SRCX, COL_SRCY]], dims = 1)
 end
 
+
+function n_sources(sources::init_SourceSet)
+   return length(unique(@view sources.data[:, COL_SRC]))
+end
+
+
+function n_knots(sources::init_SourceSet)
+   return size(knot_table(sources), 1)
+end
+
+
+function images(sources::init_SourceSet)
+   return sources.data[:, COL_OBSX:COL_OBSY]
+end
+
+
+function images_of(sources::init_SourceSet, src_id::Int64, knot_id::Int64)
+   rows = (sources.data[:, COL_SRC] .== src_id) .& (sources.data[:, COL_KNOT] .== knot_id)
+   return sources.data[rows, COL_OBSX:COL_OBSY]
+end
+
+
+function beta_residual(model::init_BestModel, sources::init_SourceSet)
+   knots = knot_table(sources)
+   k = size(knots, 1)
+   residual = Vector{Float64}(undef, k)
+   scatter  = Vector{Float64}(undef, k)
+
+   @inbounds for j in 1:k
+      s_id, k_id = Int64(knots[j, 1]), Int64(knots[j, 2])
+      adis = sources.adis[s_id]
+      img  = images_of(sources, s_id, k_id)
+      n = size(img, 1)
+      bx = Vector{Float64}(undef, n)
+      by = Vector{Float64}(undef, n)
+      for i in 1:n
+         ax, ay = Lenses.get_deflection(model.lens, img[i, 1], img[i, 2])
+         bx[i] = img[i, 1] - adis * ax
+         by[i] = img[i, 2] - adis * ay
+      end
+      mx, my = mean(bx), mean(by)
+      residual[j] = hypot(mx - knots[j, 3], my - knots[j, 4])
+      if n > 1
+         scatter[j] = maximum(hypot(bx[i] - mx, by[i] - my) for i in 1:n)
+      else
+         scatter[j] = 0.0
+      end
+   end
+   return residual, scatter
+end
+
+
 # --------------------------------------------------------------------------------------------------
 # Perturbation basis
 # --------------------------------------------------------------------------------------------------
@@ -119,6 +173,7 @@ struct init_PlummerBasis
    x_c::Vector{Float64}
    y_c::Vector{Float64}
    x_s::Vector{Float64}
+   scale::Float64
 end
 
 """
@@ -127,11 +182,15 @@ end
                         y_c::Vector{Float64} = Float64[], 
                         x_s::Vector{Float64} = Float64[])
 """
-function init_PlummerBasis(; D_d::Float64 = NaN, x_c::Vector{Float64}=Float64[], y_c::Vector{Float64}=Float64[], x_s::Vector{Float64}=Float64[])
+function init_PlummerBasis(; D_d::Float64         = NaN, 
+                             x_c::Vector{Float64} = Float64[], 
+                             y_c::Vector{Float64} = Float64[], 
+                             x_s::Vector{Float64} = Float64[],
+                             scale::Float64       = NaN)
    if !(length(x_c) == length(y_c) == length(x_s))
       throw(ArgumentError("x_c, y_c and x_s must have the same length (one entry per component)."))
    end
-   return init_PlummerBasis(D_d, x_c, y_c, x_s)
+   return init_PlummerBasis(D_d, x_c, y_c, x_s, scale)
 end
 
 """
@@ -140,18 +199,33 @@ end
                       scale::Float64 = NaN, 
                       core::Float64  = NaN)
 """
-function init_PlummerBasis(D_d::Float64, images::Matrix{Float64}; scale::Float64=NaN, core::Float64=NaN)
-   scale   = isnan(scale) ? 0.5 * critical_scale(images) : scale
-   core    = isnan(core) ? 1.5 * scale : core
+function init_PlummerBasis(D_d::Float64, images::Matrix{Float64}; 
+                           scale::Float64 = NaN, 
+                           core::Float64  = NaN)
+   if isnan(scale)
+      scale = 0.5 * critical_scale(images)
+   end
+   
+   if isnan(core)
+      core = 1.5 * scale
+   end
+   
    centres = grid_centres(images, scale)
    m       = size(centres, 1)
    x_s     = fill(float(core), m)
-   return init_PlummerBasis(D_d=D_d, x_c=centres[:, 1], y_c=centres[:, 2], x_s=x_s)
+   return init_PlummerBasis(D_d=D_d, x_c=centres[:, 1], y_c=centres[:, 2], x_s=x_s, scale=scale)
+end
+
+"""
+    init_PlummerBasis(D_d::Float64, sources::init_SourceSet; scale::Float64=NaN, core::Float64=NaN)
+"""
+function init_PlummerBasis(D_d::Float64, sources::init_SourceSet; scale::Float64=NaN, core::Float64=NaN)
+   return init_PlummerBasis(D_d, images(sources); scale = scale, core = core)
 end
 
 
 
-function enclosing_ellipse(images::Matrix{Float64}; inflate::Float64=1.1, tol::Float64=1E-7, maxiter::Int64=10_000)
+function enclosing_ellipse(images::Matrix{Float64}; inflate::Float64=1.01, tol::Float64=1E-7, maxiter::Int64=10_000)
    # Check if we have more than one image
    n, d = size(images, 1), size(images, 2)
    if n < 4
@@ -223,7 +297,7 @@ end
 # --------------------------------------------------------------------------------------------------
 struct init_DegeneracySpace
    basis::init_PlummerBasis
-   images::Matrix{Float64}
+   sources::init_SourceSet
    U::Matrix{Float64}
    S::Vector{Float64}
    Vt::Matrix{Float64}
@@ -235,10 +309,10 @@ end
                          images::Matrix{Float64}; 
                          rtol::Float64 = 1E-8)
 """
-function init_DegeneracySpace(basis::init_PlummerBasis, images::Matrix{Float64}; rtol::Float64=1e-8)
-   A = constraint_matrix(basis, images)
+function init_DegeneracySpace(basis::init_PlummerBasis, sources::init_SourceSet; rtol::Float64=1e-8)
+   A = constraint_matrix(basis, images(sources))
    F = svd(A; full=true)
-   return init_DegeneracySpace(basis, images, F.U, F.S, F.Vt, rtol)
+   return init_DegeneracySpace(basis, sources, F.U, F.S, F.Vt, rtol)
 end
 
 
@@ -298,19 +372,26 @@ end
 """
     init_ShaDes(basis::init_PlummerBasis, 
                 masses::Vector{Float64}, 
-                images::Matrix{Float64})
+                sources::init_SourceSet)
 """
 struct init_ShaDes
    basis::init_PlummerBasis
    masses::Vector{Float64}
-   images::Matrix{Float64}
+   sources::init_SourceSet
 
-   function init_ShaDes(basis::init_PlummerBasis, masses::Vector{Float64}, images::Matrix{Float64})
-      length(masses) == length(basis.x_c) ||
-         throw(ArgumentError("need one mass per component; got $(length(masses)) for " *
-                             "$(length(basis.x_c)) components."))
-      return new(basis, Vector{Float64}(masses), Matrix{Float64}(images))
+   function init_ShaDes(basis::init_PlummerBasis, masses::Vector{Float64}, sources::init_SourceSet)
+      if length(masses) != length(basis.x_c)
+         throw(ArgumentError("need one mass per component; got $(length(masses)) for $(length(basis.x_c)) components."))
+      end
+      return new(basis, Vector{Float64}(masses), sources)
    end
+end
+
+
+function init_ShaDes(space::init_DegeneracySpace; 
+                     relax::Float64   = 0.0, 
+                     rng::AbstractRNG = Random.default_rng())
+   return init_ShaDes(space.basis, sample_masses(space; relax = relax, rng = rng), space.sources)
 end
 
 
@@ -325,11 +406,11 @@ Construct a `LensFactory.Lenses.MultiPlummerLens` from the ShaDes object.
 - `Lenses.MultiPlummerLens`: The `LensFactory.Lenses.init_MultiPlummerLens` object.
 """
 function shade_lens(shade::init_ShaDes)
-   return Lenses.init_MultiPlummerLens(D_d = shade.basis.D_d, 
-                                       x_c = shade.basis.x_c,
-                                       y_c = shade.basis.y_c, 
+   return Lenses.init_MultiPlummerLens(D_d  = shade.basis.D_d, 
+                                       x_c  = shade.basis.x_c,
+                                       y_c  = shade.basis.y_c, 
                                        mass = shade.masses,
-                                       x_s = shade.basis.x_s)
+                                       x_s  = shade.basis.x_s)
 end
 
 
@@ -418,7 +499,7 @@ images.
 - `init_ShaDes`: The rescaled ShaDes object.
 """
 function rescale(shade::init_ShaDes, factor::Float64)
-   return init_ShaDes(shade.basis, factor .* shade.masses, shade.images)
+   return init_ShaDes(shade.basis, factor .* shade.masses, shade.sources)
 end
 
 
@@ -441,10 +522,11 @@ an equally good fit.
 """
 function image_residuals(shade::init_ShaDes)
    lens = shade_lens(shade)
-   n = size(shade.images, 1)
-   r = Matrix{Float64}(undef, n, 2)
+   obs  = images(shade.sources)
+   n    = size(obs, 1)
+   r    = Matrix{Float64}(undef, n, 2)
    @inbounds for i in 1:n
-      ax, ay = Lenses.get_deflection(lens, shade.images[i, 1], shade.images[i, 2])
+      ax, ay = Lenses.get_deflection(lens, obs[i, 1], obs[i, 2])
       r[i, 1] = ax
       r[i, 2] = ay
    end
@@ -553,9 +635,232 @@ function multiplicity(lens::Lenses.AbstractLens, model::init_BestModel, sources:
    N = Vector{Int64}(undef, k)
    open_total = 0
 
-   
+   for a in unique(adis)
+      caustics_tan, caustics_rad = Lenses.get_caustic(lens, θx, θy, a, ψxx, ψyy, ψxy)
+
+      curves = Vector{Vector{Vector{Float64}}}()
+      for curve in vcat(caustics_tan, caustics_rad)
+         if _is_closed(curve)
+            push!(curves, curve)
+         else
+            open_total = open_total + 1
+         end
+      end
+
+      for j in 1:k
+         if adis[j] != a
+            continue
+         end
+         N[j] = Lenses.get_image_multiplicity(curves, knots[j, 3], knots[j, 4]; n_far = n_far, verbose = false)
+      end
+
+      if open_total > 0
+         @warn "Discarded $(open_total) open critical curve(s) and caustic(s)." maxlog=1
+      end
+   end
+   return N
 end
 
+
+# --------------------------------------------------------------------------------------------------
+# Checking one realisation
+# --------------------------------------------------------------------------------------------------
+struct init_ShaDesCheck
+   knots::Matrix{Float64}
+   n_model::Vector{Int64}
+   n_shade::Vector{Int64}   
+end
+
+
+function is_degenerate(check::init_ShaDesCheck)
+   return all(check.n_shade .== check.n_model)
+end
+
+
+function failed_knots(check::init_ShaDesCheck)
+   bad = Tuple{Int64, Int64, Int64, Int64}[]
+   for j in eachindex(check.n_model)
+      if check.n_shade[j] != check.n_model[j]
+         push!(bad, (Int64(check.knots[j, 1]), Int64(check.knots[j, 2]), check.n_model[j], check.n_shade[j]))
+      end
+   end
+   return bad
+end
+
+
+function print_check(c::init_ShaDesCheck; io::IO = stdout)
+   println(io, "init_ShaDesCheck: ", is_degenerate(c) ? "degenerate" : "not a degeneracy")
+   println(io, "    src  knot    N_M -> N_MP")
+   for j in eachindex(c.n_model)
+      flag = c.n_shade[j] != c.n_model[j] ? "  <-" : ""
+      println(io, lpad(Int64(c.knots[j, 1]), 7), lpad(Int64(c.knots[j, 2]), 6),
+                  lpad(c.n_model[j], 7), " -> ", rpad(c.n_shade[j], 8), flag)
+   end
+   return nothing
+end
+
+
+function magnification(lens::Lenses.AbstractLens, sources::init_SourceSet)
+   n = size(sources.data, 1)
+   mu = Vector{Float64}(undef, n)
+   @inbounds for i in 1:n
+      adis = sources.adis[Int64(sources.data[i, COL_SRC])]
+      κ, γ1, γ2 = Lenses.get_kappa_gamma(lens, sources.data[i, COL_OBSX], sources.data[i, COL_OBSY], adis)
+      mu[i] = 1.0 / ((1.0 - κ)^2 - γ1^2 - γ2^2)
+   end
+   return mu
+end
+
+
+function parity_flips(shade::init_ShaDes, model::init_BestModel)
+   mu_model = magnification(model.lens, shade.sources)
+   mu_shade = magnification(total_lens(shade, model), shade.sources)
+   flipped = findall(i -> sign(mu_model[i]) != sign(mu_shade[i]), eachindex(mu_model))
+   return flipped, mu_model, mu_shade
+end
+
+
+function check_shade(shade::init_ShaDes, model::init_BestModel; n_far::Int64 = 1)
+   sources = shade.sources
+   n_model = multiplicity(model.lens, model, sources; n_far = n_far)
+   n_shade = multiplicity(total_lens(shade, model), model, sources; n_far = n_far)
+
+   knots = knot_table(sources)
+   for j in eachindex(n_model)
+      s_id, k_id = Int64(knots[j, 1]), Int64(knots[j, 2])
+      n_obs = size(images_of(sources, s_id, k_id), 1)
+      if n_model[j] < n_obs
+         @warn "source $(s_id), knot $(k_id): the best-fit model predicts $(n_model[j]) " *
+               "image(s) but $(n_obs) are given.  Enlarge the grid, or check `beta_residual`, " *
+               "before reading anything into the comparison." maxlog=1
+      end
+   end
+   return init_ShaDesCheck(knot_table(sources), n_model, n_shade)
+end
+
+
+function cap_multiplicity(shade::init_ShaDes, model::init_BestModel; n_scan::Int64 = 8,
+                          iters::Int64 = 12, n_far::Int64 = 1)
+   if n_scan < 1
+      throw(ArgumentError("n_scan must be at least 1; got $n_scan."))
+   end
+
+   sources = shade.sources
+   n_model = multiplicity(model.lens, model, sources; n_far = n_far)
+
+   function ok(f::Float64)
+      n = multiplicity(total_lens(rescale(shade, f), model), model, sources; n_far = n_far)
+      return all(n .== n_model)
+   end
+
+   if ok(1.0)
+      return shade, 1.0
+   end
+
+   f_pass, f_fail = 0.0, 1.0
+   for i in (n_scan - 1):-1:1
+      f = i / n_scan
+      if ok(f)
+         f_pass = f
+         break
+      end
+      f_fail = f
+   end
+   if f_pass == 0.0
+      @warn "no amplitude on the ladder preserves the multiplicities; this direction in the null " *
+            "space is ruled out by the data at any amplitude worth having."
+      return rescale(shade, 0.0), 0.0
+   end
+
+   for _ in 1:iters
+      f = 0.5 * (f_pass + f_fail)
+      ok(f) ? (f_pass = f) : (f_fail = f)
+   end
+   return rescale(shade, f_pass), f_pass
+end
+
+# --------------------------------------------------------------------------------------------------
+# One realisation, end to end
+# --------------------------------------------------------------------------------------------------
+struct init_ShaDesReport
+   scale::Float64
+   core::Float64
+   n_comp::Int64
+   n_free::Int64
+   positivity::Float64
+   factor::Float64
+   rms_kappa::Float64
+   check::init_ShaDesCheck
+   binding::NTuple{3, Float64}
+   image_residual::Float64
+   beta_residual::Float64
+   flipped::Vector{Int64}
+   mu_ratio::Float64
+   total_mass::Float64
+   net_mass::Float64
+end
+
+
+function print_report(r::init_ShaDesReport; io::IO = stdout)
+   println(io, "init_ShaDesReport")
+   println(io, "   basis           : scale ", round(r.scale, sigdigits = 3), ", core ",
+                                     round(r.core, sigdigits = 3), " arcsec, ", r.n_comp,
+                                     " components, ", r.n_free, " free")
+   println(io, "   positivity cap  : ", round(r.positivity, sigdigits = 4), " rms kappa")
+   println(io, "   multiplicity    : ", round(r.factor, sigdigits = 3), " of it")
+   println(io, "   rms kappa used  : ", round(r.rms_kappa, sigdigits = 4))
+   println(io, "   cap set at      : (", round(r.binding[1], digits = 2), ", ",
+                                         round(r.binding[2], digits = 2), ") arcsec, kappa_M = ",
+                                         round(r.binding[3], sigdigits = 3))
+   println(io, "   image residual  : ", round(r.image_residual, sigdigits = 3), " arcsec")
+   println(io, "   beta residual   : ", round(r.beta_residual, sigdigits = 3), " arcsec")
+   println(io, "   parity flips    : ", isempty(r.flipped) ? "none" : string(r.flipped))
+   println(io, "   max |mu| change : x", round(r.mu_ratio, sigdigits = 3))
+   println(io, "   mass moved      : ", round(r.total_mass, sigdigits = 4), " Msun (net ",
+                                        round(r.net_mass, sigdigits = 4), ")")
+   print_check(r.check; io = io)
+   return nothing
+end
+
+
+function realisation(model::init_BestModel, space::init_DegeneracySpace; relax::Float64 = 0.0,
+                     kappa_min::Float64 = 0.0, safety::Float64 = 1.0, n_far::Int64 = 1,
+                     n_scan::Int64 = 8, iters::Int64 = 12,
+                     rng::AbstractRNG = Random.default_rng())
+   shade = init_ShaDes(space; relax = relax, rng = rng)
+   shade, positivity, binding = cap_positivity(shade, model; kappa_min = kappa_min,
+                                               safety = safety)
+
+   shade, factor = cap_multiplicity(shade, model; n_scan = n_scan, iters = iters, n_far = n_far)
+
+   check = check_shade(shade, model; n_far = n_far)
+   flipped, mu_model, mu_shade = parity_flips(shade, model)
+   mu_ratio = maximum(abs(mu_shade[i] / mu_model[i]) for i in eachindex(mu_model))
+
+   res = image_residuals(shade)
+   image_res = maximum(hypot(res[i, 1], res[i, 2]) for i in axes(res, 1))
+   beta_res, _ = beta_residual(model, shade.sources)
+
+   report = init_ShaDesReport(space.basis.scale, first(space.basis.x_s),
+                              length(space.basis.x_c), degeneracy_dimension(space),
+                              positivity, factor, factor * safety * positivity, check, binding,
+                              image_res, maximum(beta_res), flipped, mu_ratio,
+                              total_mass(shade), net_mass(shade))
+   return shade, report
+end
+
+
+function realisation(model::init_BestModel, sources::init_SourceSet; scale::Float64 = NaN,
+                     core::Float64 = NaN, rtol::Float64 = 1e-8, relax::Float64 = 0.0,
+                     kappa_min::Float64 = 0.0, safety::Float64 = 1.0, n_far::Int64 = 1,
+                     n_scan::Int64 = 8, iters::Int64 = 12,
+                     rng::AbstractRNG = Random.default_rng())
+   basis = init_PlummerBasis(model.D_d, sources; scale = scale, core = core)
+   space = init_DegeneracySpace(basis, sources; rtol = rtol)
+
+   return realisation(model, space; relax = relax, kappa_min = kappa_min, safety = safety,
+                      n_far = n_far, n_scan = n_scan, iters = iters, rng = rng)
+end
 
 
 end
