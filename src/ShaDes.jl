@@ -86,22 +86,30 @@ struct init_SourceSet
    adis::Vector{Float64}
 
    function init_SourceSet(data::Matrix{Float64}, adis::Vector{Float64})
-      size(data, 2) == 6 || throw(ArgumentError("data must have 6 columns " *
-                                  "(src_id, knot_id, obs_x, obs_y, src_x, src_y); got $(size(data, 2))."))
-      size(data, 1) ≥ 1 || throw(ArgumentError("data has no rows."))
+      if size(data, 2) != 6
+         throw(ArgumentError("data must have 6 columns " *"(src_id, knot_id, obs_x, obs_y, src_x, src_y); got $(size(data, 2))."))
+      end
+
+      if size(data, 1) < 1
+         throw(ArgumentError("data has no rows."))
+      end
  
-      all(x -> x ≥ 1 && x == round(x), @view data[:, COL_SRC:COL_KNOT]) ||
+      if !all(x -> x ≥ 1 && x == round(x), @view data[:, COL_SRC:COL_KNOT])
          throw(ArgumentError("src_id and knot_id must be positive whole numbers."))
+      end
  
       n_src = Int64(maximum(@view data[:, COL_SRC]))
-      length(adis) ≥ n_src ||
-         throw(ArgumentError("adis must cover every source in the table; got $(length(adis)) " *
-                             "entries but src_id runs up to $(n_src)."))
- 
+      if length(adis) != n_src
+         throw(ArgumentError("adis must be equal to number of source; got $(length(adis)) entries but src_id runs up to $(n_src)."))
+      end
       return new(copy(data), copy(adis))
    end
 end
 
+
+function knot_table(sources::init_SourceSet)
+   return unique(sources.data[:, [COL_SRC, COL_KNOT, COL_SRCX, COL_SRCY]], dims = 1)
+end
 
 # --------------------------------------------------------------------------------------------------
 # Perturbation basis
@@ -539,7 +547,13 @@ function multiplicity(lens::Lenses.AbstractLens, model::init_BestModel, sources:
    θx, θy = model.grid_x, model.grid_y
    ψxx, ψyy, ψxy = Lenses.get_jacobian(lens, θx, θy)
 
+   knots = knot_table(sources)
+   k = size(knots, 1)
+   adis = [sources.adis[Int64(knots[j, 1])] for j in 1:k]
+   N = Vector{Int64}(undef, k)
+   open_total = 0
 
+   
 end
 
 
