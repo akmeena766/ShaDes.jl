@@ -17,6 +17,10 @@ export init_BestModel
 export init_SourceSet
 export init_PlummerBasis
 export init_DegeneracySpace
+export shift_groups
+export shift_deflections
+export source_shifts
+export shifted_sources
 
 
 # --------------------------------------------------------------------------------------------------
