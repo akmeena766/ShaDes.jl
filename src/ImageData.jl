@@ -63,7 +63,7 @@ function _image_table(raw::AbstractMatrix{Float64}, reference::Tuple{Float64, Fl
  
    # (RA, Dec) --> (arcsec, arcsec)
    if reference != (0.0, 0.0)
-      x, y = LensFactory.LFUtils.gnomonic_offsets_arcsec(reference[1], reference[2], data[:, COL_OBSX], data[:, COL_OBSY])
+      x, y = LFUtils.AstrometricOps.gnomonic_offsets_arcsec(reference[1], reference[2], data[:, COL_OBSX], data[:, COL_OBSY])
       data[:, COL_OBSX] .= x
       data[:, COL_OBSY] .= y
    end
@@ -206,7 +206,7 @@ end
 
 function source_scatter(lens::Lenses.AbstractLens, imgs::init_ImageSet)
    knots = knot_table(imgs)
-   beta, _ = source_positions(lens, imgs)
+   beta = source_positions(lens, imgs)
    out = Vector{Float64}(undef, size(knots, 1))
    @inbounds for j in axes(knots, 1)
       s_id, k_id = Int64(knots[j, 1]), Int64(knots[j, 2])

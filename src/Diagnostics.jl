@@ -446,10 +446,14 @@ function print_report(r::init_ShaDesReport; io::IO = stdout)
 end
 
 
-function realisation(model::init_BestModel, space::init_DegeneracySpace; relax::Float64 = 0.0,
-                     kappa_min::Float64 = 0.0, safety::Float64 = 1.0, n_far::Int64 = 1,
-                     n_scan::Int64 = 8, iters::Int64 = 12,
-                     rng::AbstractRNG = Random.default_rng())
+function realisation(model::init_BestModel, space::init_DegeneracySpace; 
+                     relax::Float64     = 0.0,
+                     kappa_min::Float64 = 0.0, 
+                     safety::Float64    = 1.0, 
+                     n_far::Int64       = 1,
+                     n_scan::Int64      = 8, 
+                     iters::Int64       = 12,
+                     rng::AbstractRNG   = Random.default_rng())
    shade = init_ShaDes(space; relax = relax, rng = rng)
    shade, positivity, binding = cap_positivity(shade, model; kappa_min = kappa_min,
                                                safety = safety)
@@ -469,18 +473,4 @@ function realisation(model::init_BestModel, space::init_DegeneracySpace; relax::
                               image_res, shade.shift, max_shift(shade),
                               flipped, mu_ratio, total_mass(shade), net_mass(shade))
    return shade, report
-end
-
-
-function realisation(model::init_BestModel, imgs::init_ImageSet; scale::Float64 = NaN,
-                     core::Float64 = NaN, rtol::Float64 = 1e-8, shift::Symbol = :none,
-                     relax::Float64 = 0.0,
-                     kappa_min::Float64 = 0.0, safety::Float64 = 1.0, n_far::Int64 = 1,
-                     n_scan::Int64 = 8, iters::Int64 = 12,
-                     rng::AbstractRNG = Random.default_rng())
-   basis = init_PlummerBasis(model.D_d, imgs; scale = scale, core = core)
-   space = init_DegeneracySpace(basis, imgs; rtol = rtol, shift = shift)
-
-   return realisation(model, space; relax = relax, kappa_min = kappa_min, safety = safety,
-                      n_far = n_far, n_scan = n_scan, iters = iters, rng = rng)
 end
