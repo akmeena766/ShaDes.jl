@@ -1,37 +1,6 @@
 # --------------------------------------------------------------------------------------------------
-# Generate.jl -- building a shape degeneracy
-# --------------------------------------------------------------------------------------------------
-# Given a best-fit model and an image set, construct perturbations the image positions cannot see.
-#
-#   * `shift_groups`         -- which images must share one constant deflection, i.e. how much freedom
-#                               the unobservable source position is allowed to absorb.
-#   * `init_PlummerBasis`    -- the Plummer components the perturbation is built from.
-#   * `init_DegeneracySpace` -- the constraint matrix and its null space.
-#   * `init_ShaDes`          -- one realisation: a basis plus a mass vector drawn from that null space.
-#   * `shade_lens`, `total_lens`, `shade_kappa`, `rescale` -- the perturbation as a LensFactory lens.
-# --------------------------------------------------------------------------------------------------
-
-
-# --------------------------------------------------------------------------------------------------
 # Source-plane shift modes
 # --------------------------------------------------------------------------------------------------
-# A perturbation P leaves the images untouched if its deflection is *constant* over every image of a
-# knot, not necessarily zero.  A constant c there moves that knot's source by
-#
-#     Delta_beta = -adis * c,
-#
-# and the source plane is unobserved, so the move costs nothing.  How far the constant is allowed to
-# be shared decides how much freedom this buys:
-#
-#   :none    alpha_P = 0 at every image.  The original behaviour; no source moves.
-#   :knot    one constant per knot.  Each knot's source moves on its own, so the source morphology
-#            is free to deform.  The loosest of the three.
-#   :source  one constant per source.  Every knot of a source moves together, so the source is
-#            translated rigidly and its morphology is preserved.
-#   :global  one constant for the whole data set.
-#
-# Every mode is a coarsening of the knot partition, so each knot always lies inside exactly one
-# group and its shift is well defined.
 const SHIFT_MODES = (:none, :knot, :source, :global)
 
 
