@@ -23,7 +23,6 @@ export rows_of
 export n_sources
 export n_knots
 export source_positions
-export source_scatter
 
 # Generate.jl
 export shift_groups

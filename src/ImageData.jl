@@ -73,6 +73,7 @@ end
 
 """
     init_ImageSet(data::Matrix{Float64}, adis::Vector{Float64})
+Observed image positions and their astrometric errors, taken from a `LensFactory` image table.
 """
 struct init_ImageSet
    data::Matrix{Float64}
@@ -85,6 +86,10 @@ struct init_ImageSet
 end
 
 
+"""
+    knot_table(imgs::init_ImageSet)
+
+"""
 function knot_table(imgs::init_ImageSet)
    return unique(imgs.data[:, [COL_SRC, COL_KNOT]], dims = 1)
 end
@@ -195,27 +200,13 @@ function source_positions(lens::Lenses.AbstractLens, imgs::init_ImageSet)
    @inbounds for j in 1:k
       rows = rows_of(imgs, Int64(knots[j, 1]), Int64(knots[j, 2]))
       β = _get_source_position(lens,
-                               imgs.data[rows, COL_OBSX], imgs.data[rows, COL_OBSY],
-                               imgs.data[rows, COL_SIGX], imgs.data[rows, COL_SIGY], imgs.data[rows, COL_SIGT],
+                               imgs.data[rows, COL_OBSX], 
+                               imgs.data[rows, COL_OBSY],
+                               imgs.data[rows, COL_SIGX], 
+                               imgs.data[rows, COL_SIGY], 
+                               imgs.data[rows, COL_SIGT],
                                imgs.adis[Int64(knots[j, 1])])
       beta[j, 1], beta[j, 2] = β
    end
    return beta
-end
-
-
-function source_scatter(lens::Lenses.AbstractLens, imgs::init_ImageSet)
-   knots = knot_table(imgs)
-   beta = source_positions(lens, imgs)
-   out = Vector{Float64}(undef, size(knots, 1))
-   @inbounds for j in axes(knots, 1)
-      s_id, k_id = Int64(knots[j, 1]), Int64(knots[j, 2])
-      rows = rows_of(imgs, s_id, k_id)
-      adis = imgs.adis[s_id]
-      x = imgs.data[rows, COL_OBSX]
-      y = imgs.data[rows, COL_OBSY]
-      ax, ay = Lenses.get_deflection(lens, x, y)
-      out[j] = maximum(hypot(x[i] - adis * ax[i] - beta[j, 1], y[i] - adis * ay[i] - beta[j, 2]) for i in eachindex(rows))
-   end
-   return out
 end

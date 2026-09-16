@@ -15,10 +15,11 @@ makedocs(
                                 assets = ["assets/custom.css"],
                                 prettyurls = get(ENV, "CI", nothing) == "true"),
    pages = [
-         "Home" => [
-                     "Introduction" => "index.md",
-                     "Functions" => "functions.md"
-                   ],
+         "Introduction"   => "index.md",
+         "Input"          => "Input.md",
+         "Generation"     => "Generation.md",
+         "Physical caps"  => "PhysicalCaps.md",
+         "Diagnostics"    => "Diagnostics.md",
          "Plot Extension" => "plot.md",
          "Bibliography"   => "References.md"
       ]
