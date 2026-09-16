@@ -55,7 +55,7 @@ const COL_SIGT = 7
 function _image_table(raw::AbstractMatrix{Float64}, reference::Tuple{Float64, Float64})
    if size(raw, 2) < 8
       throw(ArgumentError("LensFactory image table needs at least 8 columns (src_id, knot_id, " *
-                          "x, y, z_s, sig_x, sig_y, sig_theta); got $(size(raw, 2))."))
+                          "x, y, z_s, σx, σy, σθ); got $(size(raw, 2))."))
    end
  
     # skips z_s, and the flux and time-delay columns
@@ -72,8 +72,24 @@ end
 
 
 """
-    init_ImageSet(data::Matrix{Float64}, adis::Vector{Float64})
+    init_ImageSet(data::Matrix{Float64}, adis::Vector{Float64};
+                  reference::Tuple{Float64, Float64} = (0.0, 0.0))
 Observed image positions and their astrometric errors, taken from a `LensFactory` image table.
+
+# Arguments
+- `raw`: A `LensFactory` image table containing at least eight columns [`src_id`, `knot_id`, `x`, 
+   `y`, `z_s`, `σx`, `σy`, `σθ` -- optionally followed by magnitude and time-delay columns.  
+- `adis`: ``N_{\\rm src}`` vector of distance ratios, indexed by `src_id`.
+
+# Keyword Arguments
+- `reference = (0.0, 0.0)`: If `reference` is something else than (0.0, 0.0), `x` and `y` are 
+   read as RA/Dec in degrees and converted into arcsecond offsets from the reference position
+   using `LensFactory.LFUtils.AstrometricOps.gnomonic_offsets_arcsec`.  If `reference` is 
+   (0.0, 0.0), `x` and `y` are assumed to be in arcseconds already.
+
+# Returns
+- initialized `init_ImageSet` object.
+
 """
 struct init_ImageSet
    data::Matrix{Float64}
@@ -88,34 +104,47 @@ end
 
 """
     knot_table(imgs::init_ImageSet)
-
 """
 function knot_table(imgs::init_ImageSet)
    return unique(imgs.data[:, [COL_SRC, COL_KNOT]], dims = 1)
 end
 
 
+"""
+    n_sources(imgs::init_ImageSet)
+"""
 function n_sources(imgs::init_ImageSet)
    return length(unique(@view imgs.data[:, COL_SRC]))
 end
 
 
+"""
+    n_knots(imgs::init_ImageSet)
+"""
 function n_knots(imgs::init_ImageSet)
    return size(knot_table(imgs), 1)
 end
 
 
+"""
+    positions_all(imgs::init_ImageSet)
+"""
 function positions(imgs::init_ImageSet)
    return imgs.data[:, COL_OBSX:COL_OBSY]
 end
 
 
+"""
+    positions_knot(imgs::init_ImageSet, src_id::Int64, knot_id::Int64)
+"""
 function positions_of(imgs::init_ImageSet, src_id::Int64, knot_id::Int64)
    rows = (imgs.data[:, COL_SRC] .== src_id) .& (imgs.data[:, COL_KNOT] .== knot_id)
    return imgs.data[rows, COL_OBSX:COL_OBSY]
 end
 
-
+"""
+    rows_of(imgs::init_ImageSet, src_id::Int64, knot_id::Int64)
+"""
 function rows_of(imgs::init_ImageSet, src_id::Int64, knot_id::Int64)
    return findall(i -> imgs.data[i, COL_SRC] == src_id && imgs.data[i, COL_KNOT] == knot_id, 1:size(imgs.data, 1))
 end
@@ -144,8 +173,11 @@ end
 
 
 function _get_source_position(lens::Lenses.AbstractLens,
-                              x::Vector{Float64},  y::Vector{Float64},
-                              σx::Vector{Float64}, σy::Vector{Float64}, σθ::Vector{Float64},
+                              x::Vector{Float64},  
+                              y::Vector{Float64},
+                              σx::Vector{Float64}, 
+                              σy::Vector{Float64}, 
+                              σθ::Vector{Float64},
                               adis::Float64)
    n = length(x)
  
@@ -192,6 +224,17 @@ function _get_source_position(lens::Lenses.AbstractLens,
 end
 
 
+"""
+    source_positions(lens::Lenses.AbstractLens, imgs::init_ImageSet)
+Get best-fit for every source and knot in the given image set.
+
+- Arguments
+- `lens` : The `LensFactory.jl` lens model to test.
+- `imgs` : The observed image set stored in `init_ImageSet`.
+
+# Returns
+- Source positions.
+"""
 function source_positions(lens::Lenses.AbstractLens, imgs::init_ImageSet)
    knots = knot_table(imgs)
    k     = size(knots, 1)
