@@ -20,7 +20,18 @@ end
 """
     shift_groups(imgs::init_ImageSet, shift::Symbol)
 Partition the rows of `imgs.data` into the sets of images that must share one constant
-deflection.  Returns an empty vector for `shift = :none`, for which no constant is allowed.
+deflection.
+
+# Arguments
+- `imgs` : ImageSet containing the image positions.
+- `shift` : Shift mode to use. The allowed shift modes are 
+   - `:none`: No constraint on the deflection.
+   - `:knot`: Images with the same knot share the same constant deflection.
+   - `:source`: Images with the same source share the same constant deflection.
+   - `:global`: All images share the same constant deflection.
+
+# Returns
+- Vector of image indices that share the same constant deflection.
 """
 function shift_groups(imgs::init_ImageSet, shift::Symbol)
    if !(shift in SHIFT_MODES)
