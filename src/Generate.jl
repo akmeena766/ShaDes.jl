@@ -106,7 +106,9 @@ function init_PlummerBasis(D_d::Float64, imgs::init_ImageSet; scale::Float64=NaN
 end
 
 
-
+"""
+    enclosing_ellipse(obs::Matrix{Float64}; inflate::Float64=1.01, tol::Float64=1E-7, maxiter::Int64=10_000)
+"""
 function enclosing_ellipse(obs::Matrix{Float64}; inflate::Float64=1.01, tol::Float64=1E-7, maxiter::Int64=10_000)
    # Check if we have more than one image
    n, d = size(obs, 1), size(obs, 2)
@@ -139,12 +141,26 @@ function enclosing_ellipse(obs::Matrix{Float64}; inflate::Float64=1.01, tol::Flo
 end
 
 
+"""
+    critical_scale(obs::Matrix{Float64})
+Estimate a characteristic scale (i.e., seperation between basis componenets) for the image 
+configuration based on the enclosing ellipse.
+
+# Arguments
+- `obs::Matrix{Float64}`: Matrix of observed image positions (n images × 2 coordinates).
+
+# Returns
+- `Float64`: The estimated scale.
+"""
 function critical_scale(obs::Matrix{Float64})
    _, _, semi = enclosing_ellipse(obs)
    return sqrt(π * semi[1] * semi[2] / (2 * size(obs, 1)))
 end
 
 
+"""
+    grid_centres(obs::Matrix{Float64}, scale::Float64)
+"""
 function grid_centres(obs::Matrix{Float64}, scale::Float64)
    if scale ≤ 0
       throw(ArgumentError("scale must be positive; got $scale."))
@@ -213,7 +229,6 @@ end
 
 """
     deflection_table(basis::init_PlummerBasis, obs::Matrix{Float64})
-Deflection of each unit-mass basis component at each image, as two ``N \\times M`` matrices.
 """
 function deflection_table(basis::init_PlummerBasis, obs::Matrix{Float64})
    n = size(obs, 1)
@@ -232,6 +247,9 @@ function deflection_table(basis::init_PlummerBasis, obs::Matrix{Float64})
 end
 
 
+"""
+    constraint_matrix(basis::init_PlummerBasis, obs::Matrix{Float64})
+"""
 function constraint_matrix(basis::init_PlummerBasis, obs::Matrix{Float64})
    Ax, Ay = deflection_table(basis, obs)
    return vcat(Ax, Ay)
@@ -239,8 +257,7 @@ end
 
 
 """
-    constraint_matrix(basis::init_PlummerBasis, obs::Matrix{Float64},
-                      groups::Vector{Vector{Int64}})
+    constraint_matrix(basis::init_PlummerBasis, obs::Matrix{Float64}, groups::Vector{Vector{Int64}})
 Constraint rows for the constant-deflection degeneracy.  Within each group the rows are the
 deflection minus the group mean, so the null space is exactly the set of mass vectors whose
 deflection is constant across every group.  Centring on the mean rather than differencing against a
