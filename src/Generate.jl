@@ -293,6 +293,9 @@ function constraint_matrix(basis::init_PlummerBasis, obs::Matrix{Float64},
 end
 
 
+"""
+    degeneracy_dimension(space::init_DegeneracySpace)
+"""
 function degeneracy_dimension(space::init_DegeneracySpace)
    m = length(space.basis.x_c)
    return m - count(space.S .> space.rtol * first(space.S))
