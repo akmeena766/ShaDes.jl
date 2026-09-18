@@ -325,6 +325,27 @@ function _draw(space::init_DegeneracySpace, g::Vector{Float64}, relax::Float64)
 end
 
 
+"""
+    sample_masses(space::init_DegeneracySpace; relax::Float64=0.0, rng::AbstractRNG=Random.default_rng())
+Draw a random mass vector from the degeneracy space.  The masses are drawn from a Gaussian
+distribution in the SVD basis, with the standard deviation of each component set by the singular 
+value.  The `relax` parameter sets a floor on the singular values, so that directions with very 
+small singular values are not over-weighted.  The resulting mass vector is normalized to have a 
+maximum absolute value of 1.0.  The `rng` parameter allows for specifying a random number generator 
+for reproducibility.
+
+# Arguments
+- `space::init_DegeneracySpace`: The degeneracy space object.
+
+# Keyword Arguments
+- `relax = 0.0`: A non-negative value that sets a floor on the singular values.  Directions with 
+   singular values below `relax * first(space.S)` are treated as free directions. Default is 0.0 
+   (i.e., no relaxation).
+- `rng = Random.default_rng()`: A random number generator for reproducibility.
+
+# Returns
+- `Vector{Float64}`: A random mass vector sampled from the degeneracy space, normalized to have a maximum absolute value of 1.0.
+"""
 function sample_masses(space::init_DegeneracySpace; relax::Float64=0.0, rng::AbstractRNG=Random.default_rng())
    return _draw(space, randn(rng, length(space.basis.x_c)), relax)
 end
@@ -357,11 +378,21 @@ struct init_ShaDes
 end
 
 
+"""
+    init_ShaDes(basis::init_PlummerBasis, 
+                masses::Vector{Float64}, 
+                imgs::init_ImageSet)
+"""
 function init_ShaDes(basis::init_PlummerBasis, masses::Vector{Float64}, imgs::init_ImageSet)
    return init_ShaDes(basis, masses, imgs, :none)
 end
 
 
+"""
+    init_ShaDes(space::init_DegeneracySpace; 
+                relax::Float64   = 0.0, 
+                rng::AbstractRNG = Random.default_rng())
+"""
 function init_ShaDes(space::init_DegeneracySpace; 
                      relax::Float64   = 0.0, 
                      rng::AbstractRNG = Random.default_rng())
