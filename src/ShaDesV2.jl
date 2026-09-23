@@ -39,14 +39,16 @@ export rescale
 export total_mass
 export net_mass
 
+# Caps.jl
+export multiplicity
+export cap_multiplicity
+export cap_positivity
+
 # Diagnostics.jl
 export image_residuals
 export shift_deflections
 export source_shifts
 export max_shift
-export cap_positivity
-export cap_multiplicity
-export multiplicity
 export magnification
 export parity_flips
 export check_shade

@@ -58,6 +58,46 @@ function multiplicity(lens::Lenses.AbstractLens, model::init_BestModel, imgs::in
    return N
 end
 
+function cap_multiplicity(shade::init_ShaDes, model::init_BestModel; n_scan::Int64 = 8,
+                          iters::Int64 = 12, n_far::Int64 = 1)
+   if n_scan < 1
+      throw(ArgumentError("n_scan must be at least 1; got $n_scan."))
+   end
+
+   imgs = shade.imgs
+   n_model = multiplicity(model.lens, model, imgs; n_far = n_far)
+
+   function ok(f::Float64)
+      n = multiplicity(total_lens(rescale(shade, f), model), model, imgs; n_far = n_far)
+      return all(n .== n_model)
+   end
+
+   if ok(1.0)
+      return shade, 1.0
+   end
+
+   f_pass, f_fail = 0.0, 1.0
+   for i in (n_scan - 1):-1:1
+      f = i / n_scan
+      if ok(f)
+         f_pass = f
+         break
+      end
+      f_fail = f
+   end
+   if f_pass == 0.0
+      @warn "no amplitude on the ladder preserves the multiplicities; this direction in the null " *
+            "space is ruled out by the data at any amplitude worth having."
+      return rescale(shade, 0.0), 0.0
+   end
+
+   for _ in 1:iters
+      f = 0.5 * (f_pass + f_fail)
+      ok(f) ? (f_pass = f) : (f_fail = f)
+   end
+   return rescale(shade, f_pass), f_pass
+end
+
 
 # --------------------------------------------------------------------------------------------------
 # Positivity check
@@ -135,45 +175,4 @@ function cap_positivity(shade::init_ShaDes, model::init_BestModel; kappa_min::Fl
 
    binding = (model.grid_x[i_b, j_b], model.grid_y[i_b, j_b], model.kappa[i_b, j_b])
    return rescale(shade, safety * factor), factor * rms, binding
-end
-
-
-function cap_multiplicity(shade::init_ShaDes, model::init_BestModel; n_scan::Int64 = 8,
-                          iters::Int64 = 12, n_far::Int64 = 1)
-   if n_scan < 1
-      throw(ArgumentError("n_scan must be at least 1; got $n_scan."))
-   end
-
-   imgs = shade.imgs
-   n_model = multiplicity(model.lens, model, imgs; n_far = n_far)
-
-   function ok(f::Float64)
-      n = multiplicity(total_lens(rescale(shade, f), model), model, imgs; n_far = n_far)
-      return all(n .== n_model)
-   end
-
-   if ok(1.0)
-      return shade, 1.0
-   end
-
-   f_pass, f_fail = 0.0, 1.0
-   for i in (n_scan - 1):-1:1
-      f = i / n_scan
-      if ok(f)
-         f_pass = f
-         break
-      end
-      f_fail = f
-   end
-   if f_pass == 0.0
-      @warn "no amplitude on the ladder preserves the multiplicities; this direction in the null " *
-            "space is ruled out by the data at any amplitude worth having."
-      return rescale(shade, 0.0), 0.0
-   end
-
-   for _ in 1:iters
-      f = 0.5 * (f_pass + f_fail)
-      ok(f) ? (f_pass = f) : (f_fail = f)
-   end
-   return rescale(shade, f_pass), f_pass
 end
