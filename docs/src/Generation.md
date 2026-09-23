@@ -1,0 +1,20 @@
+# Generating ShaDes
+```@docs
+ShaDes.init_PlummerBasis
+ShaDes.shift_groups
+ShaDes.enclosing_ellipse
+ShaDes.critical_scale
+ShaDes.grid_centres
+ShaDes.init_DegeneracySpace
+ShaDes.deflection_table
+ShaDes.constraint_matrix
+ShaDes.degeneracy_dimension
+ShaDes.sample_masses
+ShaDes.init_ShaDes
+ShaDes.shade_lens
+ShaDes.total_lens
+ShaDes.shade_kappa
+ShaDes.total_mass
+ShaDes.net_mass
+ShaDes.rescale
+```

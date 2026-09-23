@@ -18,7 +18,7 @@ makedocs(
          "Introduction"   => "index.md",
          "Input"          => "Input.md",
          "Generation"     => "Generation.md",
-         "Physical caps"  => "PhysicalCaps.md",
+         "Physical caps"  => "Caps.md",
          "Diagnostics"    => "Diagnostics.md",
          "Plot Extension" => "plot.md",
          "Bibliography"   => "References.md"

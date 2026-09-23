@@ -1,105 +1,4 @@
 # --------------------------------------------------------------------------------------------------
-# Multiplicity check
-# --------------------------------------------------------------------------------------------------
-function _is_closed(curve)
-   if length(curve) >= 4 && curve[1] == curve[end]
-      return true
-   else
-      return false
-   end
-end
-
-"""
-    multiplicity(lens::Lenses.AbstractLens, model::init_BestModel, imgs::init_ImageSet;
-                 n_far::Int64 = 1)
-Number of images `lens` predicts for each knot, in the row order of `knot_table`.
-
-The source position is taken from `lens` itself, not from any stored value, so the caustics and the
-source always belong to the same lens.  That is the whole reason there is no source position in
-`init_ImageSet`: handing the perturbed lens a source position derived from the unperturbed one is
-the easiest mistake to make here, and this way it cannot be made.
-"""
-function multiplicity(lens::Lenses.AbstractLens, model::init_BestModel, imgs::init_ImageSet;
-                      n_far::Int64 = 1)
-   θx, θy = model.grid_x, model.grid_y
-   ψxx, ψyy, ψxy = Lenses.get_jacobian(lens, θx, θy)
-
-   knots   = knot_table(imgs)
-   beta = source_positions(lens, imgs)
-   k = size(knots, 1)
-   adis = [imgs.adis[Int64(knots[j, 1])] for j in 1:k]
-   N = Vector{Int64}(undef, k)
-   open_total = 0
-
-   for a in unique(adis)
-      caustics_tan, caustics_rad = Lenses.get_caustic(lens, θx, θy, a, ψxx, ψyy, ψxy)
-
-      curves = Vector{Vector{Vector{Float64}}}()
-      for curve in vcat(caustics_tan, caustics_rad)
-         if _is_closed(curve)
-            push!(curves, curve)
-         else
-            open_total = open_total + 1
-         end
-      end
-
-      for j in 1:k
-         if adis[j] != a
-            continue
-         end
-         N[j] = Lenses.get_image_multiplicity(curves, beta[j, 1], beta[j, 2]; n_far = n_far,
-                                              verbose = false)
-      end
-
-      if open_total > 0
-         @warn "Discarded $(open_total) open critical curve(s) and caustic(s)." maxlog=1
-      end
-   end
-   return N
-end
-
-function cap_multiplicity(shade::init_ShaDes, model::init_BestModel; n_scan::Int64 = 8,
-                          iters::Int64 = 12, n_far::Int64 = 1)
-   if n_scan < 1
-      throw(ArgumentError("n_scan must be at least 1; got $n_scan."))
-   end
-
-   imgs = shade.imgs
-   n_model = multiplicity(model.lens, model, imgs; n_far = n_far)
-
-   function ok(f::Float64)
-      n = multiplicity(total_lens(rescale(shade, f), model), model, imgs; n_far = n_far)
-      return all(n .== n_model)
-   end
-
-   if ok(1.0)
-      return shade, 1.0
-   end
-
-   f_pass, f_fail = 0.0, 1.0
-   for i in (n_scan - 1):-1:1
-      f = i / n_scan
-      if ok(f)
-         f_pass = f
-         break
-      end
-      f_fail = f
-   end
-   if f_pass == 0.0
-      @warn "no amplitude on the ladder preserves the multiplicities; this direction in the null " *
-            "space is ruled out by the data at any amplitude worth having."
-      return rescale(shade, 0.0), 0.0
-   end
-
-   for _ in 1:iters
-      f = 0.5 * (f_pass + f_fail)
-      ok(f) ? (f_pass = f) : (f_fail = f)
-   end
-   return rescale(shade, f_pass), f_pass
-end
-
-
-# --------------------------------------------------------------------------------------------------
 # Positivity check
 # --------------------------------------------------------------------------------------------------
 """
@@ -175,4 +74,125 @@ function cap_positivity(shade::init_ShaDes, model::init_BestModel; kappa_min::Fl
 
    binding = (model.grid_x[i_b, j_b], model.grid_y[i_b, j_b], model.kappa[i_b, j_b])
    return rescale(shade, safety * factor), factor * rms, binding
+end
+
+
+# --------------------------------------------------------------------------------------------------
+# Multiplicity check
+# --------------------------------------------------------------------------------------------------
+function _is_closed(curve)
+   if length(curve) >= 4 && curve[1] == curve[end]
+      return true
+   else
+      return false
+   end
+end
+
+function multiplicity(lens::Lenses.AbstractLens, model::init_BestModel, imgs::init_ImageSet;
+                      n_far::Int64 = 1)
+   θx, θy = model.grid_x, model.grid_y
+   ψxx, ψyy, ψxy = Lenses.get_jacobian(lens, θx, θy)
+
+   knots   = knot_table(imgs)
+   beta = source_positions(lens, imgs)
+   k = size(knots, 1)
+   adis = [imgs.adis[Int64(knots[j, 1])] for j in 1:k]
+   N = Vector{Int64}(undef, k)
+   open_total = 0
+
+   for a in unique(adis)
+      caustics_tan, caustics_rad = Lenses.get_caustic(lens, θx, θy, a, ψxx, ψyy, ψxy)
+
+      curves = Vector{Vector{Vector{Float64}}}()
+      for curve in vcat(caustics_tan, caustics_rad)
+         if _is_closed(curve)
+            push!(curves, curve)
+         else
+            open_total = open_total + 1
+         end
+      end
+
+      for j in 1:k
+         if adis[j] != a
+            continue
+         end
+         N[j] = Lenses.get_image_multiplicity(curves, beta[j, 1], beta[j, 2]; n_far = n_far,
+                                              verbose = false)
+      end
+
+      if open_total > 0
+         @warn "Discarded $(open_total) open critical curve(s) and caustic(s)." maxlog=1
+      end
+   end
+   return N
+end
+
+"""
+    cap_multiplicity(shade::init_ShaDes, model::init_BestModel; 
+                     n_scan::Int64 = 8,
+                     iters::Int64  = 12, 
+                     n_far::Int64  = 1)
+Scale the perturbation down until every knot keeps the number of images it is observed to have.
+ 
+Unlike positivity this is not a closed form: the image count is a step function of the amplitude, so
+the routine scans downward from the current amplitude for a value that works, then bisects between
+that and the last failure.  `n_scan` sets the scan, `iters` the bisection.
+ 
+This is also the only thing that bounds the source-plane offset.  `multiplicity` takes its source
+position from the lens it is handed, so a shift that carries a source across a caustic changes that
+knot's image count and is rejected -- which is why the returned factor responds to the offset as
+well as to the deformation of the caustics.
+
+# Arguments
+- `shade` : The perturbation, at any amplitude (the cap is scale free).
+- `model` : The best-fit model, which provides the lens and the grid.
+
+# Keyword Arguments
+- `n_scan` : Number of amplitudes to scan down from the current one, in equal steps of the current 
+   amplitude.  Must be at least 1.
+- `iters` : Number of bisection iterations to refine the cap once a working amplitude is found.
+- `n_far` : Number of far-field images to include in the multiplicity check.
+
+# Returns
+- `init_ShaDes`: the rescaled realisation.
+- `Float64`: the factor applied, `1.0` if the drawn amplitude already worked.
+"""
+function cap_multiplicity(shade::init_ShaDes, model::init_BestModel; n_scan::Int64 = 8,
+                          iters::Int64 = 12, n_far::Int64 = 1)
+   if n_scan < 1
+      throw(ArgumentError("n_scan must be at least 1; got $n_scan."))
+   end
+
+   imgs = shade.imgs
+   n_model = multiplicity(model.lens, model, imgs; n_far = n_far)
+
+   function ok(f::Float64)
+      n = multiplicity(total_lens(rescale(shade, f), model), model, imgs; n_far = n_far)
+      return all(n .== n_model)
+   end
+
+   if ok(1.0)
+      return shade, 1.0
+   end
+
+   f_pass, f_fail = 0.0, 1.0
+   for i in (n_scan - 1):-1:1
+      f = i / n_scan
+      if ok(f)
+         f_pass = f
+         break
+      end
+      f_fail = f
+   end
+   if f_pass == 0.0
+      @warn "no amplitude on the ladder preserves the multiplicities; this direction in the null " *
+            "space is ruled out by the data at any amplitude worth having."
+      return rescale(shade, 0.0), 0.0
+   end
+
+   for _ in 1:iters
+      f = 0.5 * (f_pass + f_fail)
+      ok(f) ? (f_pass = f) : (f_fail = f)
+   end
+   return rescale(shade, f_pass), f_pass
 end

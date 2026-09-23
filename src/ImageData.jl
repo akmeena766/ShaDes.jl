@@ -140,7 +140,7 @@ end
 
 
 """
-    positions_all(imgs::init_ImageSet)
+    position_all(imgs::init_ImageSet)
 Positions of all images in the given image set.
 
 # Arguments
@@ -149,13 +149,13 @@ Positions of all images in the given image set.
 # Returns
 - A matrix of image positions, with two columns: `x` and `y`.
 """
-function positions(imgs::init_ImageSet)
+function position_all(imgs::init_ImageSet)
    return imgs.data[:, COL_OBSX:COL_OBSY]
 end
 
 
 """
-    positions_knot(imgs::init_ImageSet, src_id::Int64, knot_id::Int64)
+    position_knot(imgs::init_ImageSet, src_id::Int64, knot_id::Int64)
 Positions of all images for a given source and knot in the given image set.
 
 # Arguments
@@ -166,7 +166,7 @@ Positions of all images for a given source and knot in the given image set.
 # Returns
 - A matrix of image positions for the specified source and knot, with two columns: `x` and `y`.
 """
-function positions_of(imgs::init_ImageSet, src_id::Int64, knot_id::Int64)
+function position_knot(imgs::init_ImageSet, src_id::Int64, knot_id::Int64)
    rows = (imgs.data[:, COL_SRC] .== src_id) .& (imgs.data[:, COL_KNOT] .== knot_id)
    return imgs.data[rows, COL_OBSX:COL_OBSY]
 end
