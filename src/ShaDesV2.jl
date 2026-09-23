@@ -72,6 +72,7 @@ function plot_caustic end
 # --------------------------------------------------------------------------------------------------
 include("ImageData.jl")
 include("Generate.jl")
+include("Caps.jl")
 include("Diagnostics.jl")
 
 
