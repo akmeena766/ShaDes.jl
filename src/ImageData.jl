@@ -35,14 +35,6 @@ end
 # --------------------------------------------------------------------------------------------------
 # Image constraints
 # --------------------------------------------------------------------------------------------------
-# How an `init_ImageSet` stores its rows internally, after extraction from a `LensFactory` table and
-# conversion to tangent-plane arcseconds.  One row per observed image.  These index `imgs.data`; they
-# are not an input format, and nothing outside the package produces a table in this order.
-#
-# There is deliberately no source position here: a source position is not data, it is whatever a
-# given lens implies for these images, so it is computed on demand by `source_positions` from the
-# lens you are asking about.  That removes a whole class of bug -- there is no stored source position
-# that can go stale when the lens changes.
 const COL_SRC  = 1
 const COL_KNOT = 2
 const COL_OBSX = 3
@@ -104,6 +96,13 @@ end
 
 """
     knot_table(imgs::init_ImageSet)
+A table of unique source and knot IDs in the given image set.
+
+# Arguments
+# - `imgs`: The observed image set stored in `init_ImageSet`.
+
+# Returns
+- A matrix of unique source and knot IDs, with two columns: `src_id` and `knot_id`.
 """
 function knot_table(imgs::init_ImageSet)
    return unique(imgs.data[:, [COL_SRC, COL_KNOT]], dims = 1)
@@ -112,6 +111,13 @@ end
 
 """
     n_sources(imgs::init_ImageSet)
+Number of unique sources in the given image set.
+
+# Arguments
+- `imgs`: The observed image set stored in `init_ImageSet`.
+
+# Returns
+- The number of unique sources in the image set.
 """
 function n_sources(imgs::init_ImageSet)
    return length(unique(@view imgs.data[:, COL_SRC]))
@@ -120,6 +126,13 @@ end
 
 """
     n_knots(imgs::init_ImageSet)
+Number of unique knots in the given image set.
+
+# Arguments
+- `imgs`: The observed image set stored in `init_ImageSet`.
+
+# Returns
+- The number of unique knots in the image set.
 """
 function n_knots(imgs::init_ImageSet)
    return size(knot_table(imgs), 1)
@@ -128,6 +141,13 @@ end
 
 """
     positions_all(imgs::init_ImageSet)
+Positions of all images in the given image set.
+
+# Arguments
+- `imgs`: The observed image set stored in `init_ImageSet`.
+
+# Returns
+- A matrix of image positions, with two columns: `x` and `y`.
 """
 function positions(imgs::init_ImageSet)
    return imgs.data[:, COL_OBSX:COL_OBSY]
@@ -136,6 +156,15 @@ end
 
 """
     positions_knot(imgs::init_ImageSet, src_id::Int64, knot_id::Int64)
+Positions of all images for a given source and knot in the given image set.
+
+# Arguments
+- `imgs`: The observed image set stored in `init_ImageSet`.
+- `src_id`: Source ID.
+- `knot_id`: Knot ID.
+
+# Returns
+- A matrix of image positions for the specified source and knot, with two columns: `x` and `y`.
 """
 function positions_of(imgs::init_ImageSet, src_id::Int64, knot_id::Int64)
    rows = (imgs.data[:, COL_SRC] .== src_id) .& (imgs.data[:, COL_KNOT] .== knot_id)
@@ -144,6 +173,15 @@ end
 
 """
     rows_of(imgs::init_ImageSet, src_id::Int64, knot_id::Int64)
+Get the row indices of all images for a given source and knot in the given image set.
+
+# Arguments
+- `imgs`: The observed image set stored in `init_ImageSet`.
+- `src_id`: Source ID.
+- `knot_id`: Knot ID.
+
+# Returns
+- A vector of row indices for the specified source and knot.
 """
 function rows_of(imgs::init_ImageSet, src_id::Int64, knot_id::Int64)
    return findall(i -> imgs.data[i, COL_SRC] == src_id && imgs.data[i, COL_KNOT] == knot_id, 1:size(imgs.data, 1))
